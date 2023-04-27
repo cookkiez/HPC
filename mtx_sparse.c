@@ -150,13 +150,60 @@ int mtx_ELL_free(struct mtx_ELL *mELL)
     return 0;
 }
 
-int mtx_JDS_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR) {
+int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR) {
+    mJDS->num_nonzeros = mCSR->num_nonzeros;
+    mJDS->num_rows = mCSR->num_rows;
+    mJDS->num_cols = mCSR->num_cols;
+    mJDS->num_elements = mCSR->rowptr[mCSR->num_rows] - 1;
 
+    int *ordered = (int *)calloc(mCSR->num_rows, sizeof(int));
+    mJDS->data = (float *)calloc(mJDS->num_elements, sizeof(float));
+    mJDS->col = (int *) calloc(mJDS->num_elements, sizeof(int));
+    mJDS->row_permute = (int *) calloc(mJDS->num_rows, sizeof(int));
+    // TEMP
+    //ordered[0] = 10;
+    // mJDS->jagged_ptr = (int *) calloc(ordered[0], sizeof(int));
+    int rows = mJDS->num_rows;
+    // Get number of elements in each row
+    printf("%d", rows);
+    for (int i = 0; i < rows; i++){
+        ordered[i] = mCSR->rowptr[i + 1] - mCSR->rowptr[i];
+        mJDS->row_permute[i] = i;
+    } 
+    // Bubble sort over rows
+    for (int i = 0; i < rows - 1; i++) {
+        for (int j = 0; j < rows - i - 1; j++) {
+            if (ordered[j] < ordered[j + 1]) {
+                int temp = ordered[j];
+                ordered[j] = ordered[j + 1];
+                ordered[j + 1] = temp;
+
+                temp = mJDS->row_permute[j];
+                mJDS->row_permute[j] = mJDS->row_permute[j + 1];
+                mJDS->row_permute[j + 1] = temp;
+            }
+        }
+    }
+    printf("TEEST");
+    mJDS->max_el_in_row = ordered[0];
+    mJDS->jagged_ptr = (int *) calloc(ordered[0], sizeof(int));
+    int data_index = 0;
+    for (int row = 0; row < rows; row++) {
+        int curr_row = mJDS->row_permute[row];
+        for (int i = mCSR->rowptr[curr_row]; i < mCSR->rowptr[curr_row + 1]; i++) {
+            mJDS->data[data_index] = mCSR->data[i];
+            mJDS->col[data_index] = mCSR->col[i];
+            data_index++;
+        }
+    }
+    printf("TEEST");
+    free(ordered);
 }
 
 int mtx_JDS_free(struct mtx_JDS *mJDS) {
     free(mJDS->col);
     free(mJDS->data);
-
+    free(mJDS->jagged_ptr);
+    free(mJDS->row_permute);
     return 0;
 }
