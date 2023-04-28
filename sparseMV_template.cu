@@ -57,9 +57,22 @@ int main(int argc, char *argv[])
     mtx_CSR_create_from_mtx_COO(&h_mCSR, &h_mCOO);
     mtx_ELL_create_from_mtx_CSR(&h_mELL, &h_mCSR);
     mtx_JDS_create_from_mtx_CSR(&h_mJDS, &h_mCSR);
-    printf("%d", h_mJDS.num_elements);
+    printf("%d\n", h_mJDS.num_elements);
     for (int i = 0; i < h_mJDS.num_elements; i++) {
-        printf("%f, ", h_mJDS.data[i]);
+        printf("%.2f, ", h_mJDS.data[i]);
+    }
+    printf("\n");
+
+    for (int i = 0; i < h_mJDS.num_elements; i++) {
+        printf("%d, ", h_mJDS.col[i]);
+    }
+    printf("\n");
+    for (int i = 0; i < h_mJDS.num_rows; i++) {
+        printf("%d, ", h_mJDS.row_permute[i]);
+    }
+    printf("\n");
+    for (int i = 0; i < h_mJDS.max_el_in_row; i++) {
+        printf("%d, ", h_mJDS.jagged_ptr[i]);
     }
     printf("\n");
     // for (int i = 0; i < h_mJDS->max; i++) {
