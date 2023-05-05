@@ -57,8 +57,9 @@ void multiplyVecMatJDS(float *r, int max_el_in_row, int *jagged_ptr, float *data
         rows_computed += curr_els_in_row;
         curr_els--;
     }
+    printf("Mat x Vec \n");
     for (int i = 0; i < num_rows; i++) {
-        printf("%f  ", r[i]);
+        printf("%f %f \n ", r[i], multiplyVector[i]);
     }
     printf("\n");
 }
@@ -67,17 +68,22 @@ float dotProduct(float *a, float *b, int num_rows) {
     float out = 0.0;
     for (int i = 0; i < num_rows; i++) {
         out += a[i] * b[i];
+        printf("%f, %f\n", a[i], b[i]);
     }
+    printf("%f\n\n", out);
+
     return out;
 }
 
 
 void sumVectors (float *out, float *x, float *p, bool plus, int num_rows, float coeff) { 
+    printf("SUM\n");
     for (int i = 0; i < num_rows; i++) {
+        printf("%f %f %f %f %d\n ", out[i], x[i], p[i], coeff, plus);
         out[i] = (plus) ? x[i] + coeff * p[i] : x[i] - coeff * p[i];
-        //printf("%f  ", out[i]);
+        printf("%f\n ", out[i]);
     }
-    //printf("\n");
+    printf("\n");
 }
 
 void computeResidual(float *r, int max_el_in_row, int *jagged_ptr, float *data, int *col, int *row_permute, 
@@ -90,32 +96,49 @@ void computeResidual(float *r, int max_el_in_row, int *jagged_ptr, float *data, 
 
 
 void mJDSVecSeq(int *col, float *data, int *jagged_ptr, int *row_permute, int max_el_in_row,
-                int num_rows, int num_cols, int num_elements, float *vin, float *vout, int iters) {
+                int num_rows, int num_cols, int num_elements, float *b, float *x, int iters,
+                float epsilon) {
     float *r = (float *) calloc(num_rows, sizeof(float));    
     float *r_dash = (float *) calloc(num_rows, sizeof(float));
     float *p = (float *) calloc(num_rows, sizeof(float));    
     float *p_dash = (float *) calloc(num_rows, sizeof(float)); 
-    computeResidual(r, max_el_in_row, jagged_ptr, data, col, row_permute, vin, vout, num_rows, 1.0);
+
+    computeResidual(r, max_el_in_row, jagged_ptr, data, col, row_permute, 
+        b, x, num_rows, 1.0);
     for (int i = 0; i < num_rows; i++) { r_dash[i] = r[i]; p[i] = r[i]; p_dash[i] = r[i]; }
+
     int k = 0;
-    while (k < iters) {
-        float *temp = (float *) calloc(num_rows, sizeof(float));
-        float *temp2 = (float *) calloc(num_rows, sizeof(float));
-        multiplyVecMatJDS(temp, max_el_in_row, jagged_ptr, data, col, row_permute, 
+    float rDotProduct = dotProduct(r_dash, r, num_rows);
+    printf("%f\n", rDotProduct);
+    while (k < iters && fabs(rDotProduct) > epsilon) {
+        float *mulMatVec = (float *) calloc(num_rows, sizeof(float));
+        float *mulMatVecTrans = (float *) calloc(num_rows, sizeof(float));
+        printf("// A * pk\n");
+        multiplyVecMatJDS(mulMatVec, max_el_in_row, jagged_ptr, data, col, row_permute, 
                       p, num_rows, false);
-        float dotProductStart = dotProduct(r_dash, r, num_rows);
-        float alpha_k = dotProductStart / dotProduct(p_dash, temp, num_rows);
-        sumVectors(vout, vout, p, true, num_rows, alpha_k);
-        sumVectors(r, r, temp, false, num_rows, alpha_k);
-        // TODO make this transpose
-        printf("TRANSPOSE \n");
-        multiplyVecMatJDS(temp2, max_el_in_row, jagged_ptr, data, col, row_permute, 
-                      vin, num_rows, true); 
-        sumVectors(r_dash, r_dash, temp, false, num_rows, alpha_k);
-        float beta_k = dotProduct(r_dash, r, num_rows) / dotProductStart;
+        //printf("%f\n", rDotProduct);
+        float alpha_k = rDotProduct / dotProduct(p_dash, mulMatVec, num_rows);
+        printf("alpha: %f\n", alpha_k);
+        printf("// xk + alpha_k * pk\n");
+        sumVectors(x, x, p, true, num_rows, alpha_k);
+        printf("// rk - alpha_k * A*pk\n");
+        sumVectors(r, r, mulMatVec, false, num_rows, alpha_k);
+        printf("// A^t * p_dash_k\n");
+        multiplyVecMatJDS(mulMatVecTrans, max_el_in_row, jagged_ptr, data, col, row_permute, 
+                      p_dash, num_rows, true); 
+        printf("// r_dash_k - alpha_k * A^t * p_dash_k\n");
+        sumVectors(r_dash, r_dash, mulMatVecTrans, false, num_rows, alpha_k);
+        float beta_k = dotProduct(r_dash, r, num_rows) / rDotProduct;
+        printf("beta: %f\n", beta_k);
+        printf("// rk + beta_k * pk\n");
         sumVectors(p, r, p, true, num_rows, beta_k);
+        printf("// r_dash_k + betak_k * p_dash_k\n");
         sumVectors(p_dash, r_dash, p_dash, true, num_rows, beta_k);
+        printf("// r^t * r\n");
+        rDotProduct = dotProduct(r_dash, r, num_rows);
+        printf("Finished iteration: %d\n", k);
         k++;
+        
     }
 }   
 
@@ -172,18 +195,14 @@ int main(int argc, char *argv[])
 
     // allocate vectors
     float *h_vecIn = (float *)malloc(h_mCOO.num_cols * sizeof(float));
-    for (int i = 0; i < h_mCOO.num_cols; i++)
-        h_vecIn[i] = 1.0;
-    float *h_vecOutCOO_cpu = (float *)calloc(h_mCOO.num_rows, sizeof(float));
-    //float *h_vecOutCSR_gpu = (float *)calloc(h_mCSR.num_rows, sizeof(float));
-    float *h_vecOutELL_gpu = (float *)calloc(h_mELL.num_rows, sizeof(float));
-    float* h_vecOutCSRpar = (float*)calloc(h_mCSR.num_rows, sizeof(float));
     float* h_vecOutJDSSeq = (float*)calloc(h_mCSR.num_rows, sizeof(float));
-    int iters = 1;
-    mJDSVecSeq(h_mJDS.col, h_mJDS.data, h_mJDS.jagged_ptr, h_mJDS.row_permute, h_mJDS.max_el_in_row,
-                h_mJDS.num_rows, h_mJDS.num_cols, h_mJDS.num_elements, h_vecIn, h_vecOutJDSSeq, iters);
+    for (int i = 0; i < h_mCOO.num_cols; i++) {
+        //h_vecOutJDSSeq[i] = 5;
+        h_vecIn[i] = 1.0;
+    }
 
     // compute with COO
+    float *h_vecOutCOO_cpu = (float *)calloc(h_mCOO.num_rows, sizeof(float));
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -195,10 +214,21 @@ int main(int argc, char *argv[])
         for (int i = 0; i < h_mCOO.num_nonzeros; i++)
             h_vecOutCOO_cpu[h_mCOO.row[i]] += h_mCOO.data[i] * h_vecIn[h_mCOO.col[i]];
     }
+
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float dtimeCOO_cpu = 0;
     cudaEventElapsedTime(&dtimeCOO_cpu, start, stop);
+    
+    //float *h_vecOutCSR_gpu = (float *)calloc(h_mCSR.num_rows, sizeof(float));
+    float *h_vecOutELL_gpu = (float *)calloc(h_mELL.num_rows, sizeof(float));
+    float* h_vecOutCSRpar = (float *)calloc(h_mCSR.num_rows, sizeof(float));
+    
+    int iters = 30;
+    float epsilon = 1e-10;
+    mJDSVecSeq(h_mJDS.col, h_mJDS.data, h_mJDS.jagged_ptr, h_mJDS.row_permute, h_mJDS.max_el_in_row,
+                h_mJDS.num_rows, h_mJDS.num_cols, h_mJDS.num_elements, 
+                h_vecOutCOO_cpu, h_vecOutJDSSeq, iters, epsilon);
 
     // allocate memory on device and transfer data from host 
     // CSR
@@ -287,22 +317,25 @@ int main(int argc, char *argv[])
 
     // output
     printf("Matrix: %s, size: %d x %d, nonzero: %d, max elems in row: %d\n", argv[1],h_mCOO.num_rows, h_mCOO.num_cols, h_mCOO.num_nonzeros, h_mELL.num_elementsinrow);
-    int errorsCSR_gpu = 0;
-    int errorsCSRPar_gpu = 0;
+    int errorsJDS_seq = 0;
+    int errorsJDS_par = 0;
     int errorsELL_gpu = 0;
     for(int i = 0; i < h_mCOO.num_rows; i++)
     {
-        // if (fabs(h_vecOutCOO_cpu[i] - h_vecOutCSR_gpu[i]) > 1e-4 )
-        //     errorsCSR_gpu++;
+        if (fabs(h_vecIn[i] - h_vecOutJDSSeq[i]) > 1e-4 ){
+            errorsJDS_seq++;
+            printf("%f, %f\n", h_vecIn[i], h_vecOutJDSSeq[i]);
+        }
+            
         // if (fabs(h_vecOutCOO_cpu[i] - h_vecOutCSRpar[i]) > 1e-4){
         //     errorsCSRPar_gpu++;
         //     //printf("%d, %.4f, %.4f, %.4f \n", i, h_vecOutCOO_cpu[i], h_vecOutCSRpar[i], fabs(h_vecOutCOO_cpu[i] - h_vecOutCSRpar[i]));
         // }
             
-        if (fabs(h_vecOutCOO_cpu[i]-h_vecOutELL_gpu[i]) > 1e-4 )
+        if (fabs(h_vecIn[i]-h_vecOutELL_gpu[i]) > 1e-4 )
             errorsELL_gpu++;
     }
-    printf("Errors: %d(CSR_gpu), %d(CSRPar_gpu), %d(ELL_gpu)\n", errorsCSR_gpu, errorsCSRPar_gpu, errorsELL_gpu);
+    printf("Errors: %d(JDS), %d(JDS_par), %d(ELL_gpu)\n", errorsJDS_seq, errorsJDS_par, errorsELL_gpu);
     //printf("Times: %.1f ms(COO_cpu), %.1f ms(CSR_gpu), %.1f ms (CSRPar_gpu), %.1f ms(ELL_gpu)\n\n", dtimeCOO_cpu, dtimeCSR_gpu, dtimeCSRPar_gpu, dtimeELL_gpu);
     printf("Times: %.1f ms(COO_cpu), %.1f ms(ELL_gpu)\n\n", dtimeCOO_cpu, dtimeELL_gpu);
     
