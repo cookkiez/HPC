@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <cuda.h>
 #include <math.h>
-#include "mtx_sparse.h"
+#include "../mtx_sparse.h"
 #include "helper_cuda.h"
 
 #define THREADS_PER_BLOCK 256
