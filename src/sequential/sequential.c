@@ -2,6 +2,7 @@
  * Sequential solution for solving large systems of linear equations
 */
 
+#include <math.h>
 #include <stdbool.h>
 #include <getopt.h>
 #include <stdint.h>
@@ -17,9 +18,25 @@ void printHelp(const char *progName) {
   fprintf(stderr, "Usage: %s [-n iterations] [-e margin] FILE\n", progName);
 }
 
+void vecPrint(float *vecIn, int n) {
+  printf("[");
+  for (int i = 0; i < n; i++) {
+    if (i == 0)
+      printf("%f", vecIn[i]);
+    else
+      printf(",%f", vecIn[i]);
+  }
+  printf("]\n");
+}
+
 void vecSumCoef(float *vecOut, float *vecInA, float *vecInB, bool subtract, int n, float coef) {
   for (int i = 0; i < n; i++)
     vecOut[i] = (subtract) ? (vecInA[i] - coef * vecInB[i]) : (vecInA[i] + coef * vecInB[i]);
+}
+
+void vecLinProd(float *vecOut, float *vecIn, int n, float coef) {
+  for (int i = 0; i < n; i++)
+    vecOut[i] = coef * vecIn[i];
 }
 
 float vecDotProduct(float *vecInA, float *vecInB, int n) {
@@ -45,15 +62,19 @@ void mtxVecProduct_JDS(float *vecOut, struct mtx_JDS *mtx, float *vecIn, int n) 
 int main(int argc, char *argv[]) {
   uint32_t iterations = 1000;
   float margin = 0.005;
+  bool showIntermediateResult = false;
 
   int c;
-  while ((c = getopt(argc, argv, "n:e:")) != -1) {
+  while ((c = getopt(argc, argv, "n:e:s")) != -1) {
     switch (c) {
       case 'n':
         sscanf(optarg, "%o", &iterations);
         break;
       case 'e':
         sscanf(optarg, "%f", &margin);
+        break;
+      case 's':
+        showIntermediateResult = true;
         break;
       case 'h':
       case '?':
@@ -62,6 +83,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
   }
+
+  printf("%o\n", iterations);
 
   if (optind >= argc) {
     printHelp(argv[0]);
@@ -112,6 +135,9 @@ int main(int argc, char *argv[]) {
   float *vec_x = (float*)malloc(vecSize * sizeof(float));
   for (int i = 0; i < vecSize; i++)
     vec_x[i] = 1; // Initial s
+  //vec_x[0] = 2; vec_x[1] = 1;
+  printf("Correct solution: ");
+  vecPrint(vec_x, vecSize);
 
   // b = Ax_0 (generate constant)
   float *vec_b = (float*)malloc(vecSize * sizeof(float));
@@ -119,7 +145,9 @@ int main(int argc, char *argv[]) {
 
   // x_0 = random
   for (int i = 0; i < vecSize; i++)
-    vec_x[i] = rand() % 10; // Initial x_0 value (generate randomly [0, 9])
+    vec_x[i] = rand() % 10 + 1; // Initial x_0 value (generate randomly [0, 9])
+  printf("x_0: ");
+  vecPrint(vec_x, vecSize);
 
   // r_0 = b - Ax_0
   float *vec_r = (float*)malloc(vecSize * sizeof(float));
@@ -138,12 +166,22 @@ int main(int argc, char *argv[]) {
   float *vec_p_dash = (float*)malloc(vecSize * sizeof(float));
   memcpy(vec_p_dash, vec_r_dash, vecSize * sizeof(float));
 
-  // r_dash_t_0 * r_0
-  float rr = vecDotProduct(vec_r_dash, vec_r, vecSize), rrn;
+  // b_t * b
+  float bb = vecDotProduct(vec_b, vec_b, vecSize);
 
+  // r_t_0 * r_0
+  float rtr = vecDotProduct(vec_r, vec_r, vecSize) / bb;
+
+  // calculate margin^2
+  margin = powf(margin, 2);
+  
   // Main loop
-  float alpha, beta; 
-  for (uint32_t k = 0; k < iterations && rr > margin; k++) {
+  float alpha, beta, rr, rrn;
+  uint32_t k;
+  for (k = 0; k < iterations && rtr > margin; k++) {
+    // r_dash_t_k * r_k
+    rr = vecDotProduct(vec_r_dash, vec_r, vecSize);
+
     // Ap_k
     mtxVecProduct_JDS(vec_tmp, &mtxJDS, vec_p, vecSize);
 
@@ -152,7 +190,11 @@ int main(int argc, char *argv[]) {
 
     // x_k+1 = x_k + alpha * p_k
     vecSumCoef(vec_x, vec_x, vec_p, false, vecSize, alpha);
-
+    if (showIntermediateResult) {
+      printf("x_k+1: ");
+      vecPrint(vec_x, vecSize);
+    }
+    
     // r_k+1 = r_k - alpha * A * p_k
     vecSumCoef(vec_r, vec_r, vec_tmp, true, vecSize, alpha);
 
@@ -167,6 +209,9 @@ int main(int argc, char *argv[]) {
     beta = rrn / rr;
     rr = rrn;
 
+    // r_t * r
+    rtr = vecDotProduct(vec_r, vec_r, vecSize) / bb;
+
     // p_k+1 = r_k+1 + beta * p_k
     vecSumCoef(vec_p, vec_r, vec_p, false, vecSize, beta);
 
@@ -175,14 +220,8 @@ int main(int argc, char *argv[]) {
   }
 
   // Print result
-  printf("[");
-  for (int i = 0; i < vecSize; i++) {
-    if (i == 0)
-      printf("%f", vec_x[i]);
-    else
-      printf(",%f", vec_x[i]);
-  }
-  printf("]\n");
+  printf("Iterations: %o\nResult: ", k);
+  vecPrint(vec_x, vecSize);
 
 
   // Clear memory
