@@ -175,6 +175,8 @@ int main(int argc, char *argv[]) {
   // calculate margin^2
   margin = powf(margin, 2);
   
+  clock_t time_start = clock();
+
   // Main loop
   float alpha, beta, rr, rrn;
   uint32_t k;
@@ -219,11 +221,13 @@ int main(int argc, char *argv[]) {
     vecSumCoef(vec_p_dash, vec_r_dash, vec_p_dash, false, vecSize, beta);
   }
 
+  clock_t time_end = clock();
+
   // Print result
   printf("Iterations: %o\nResult: ", k);
   vecPrint(vec_x, vecSize);
-
-
+  printf("Elapsed: %f s\n", (double)(time_end - time_start) / CLOCKS_PER_SEC);
+  
   // Clear memory
   mtx_COO_free(&mtxCOO);
   mtx_CSR_free(&mtxCSR);
