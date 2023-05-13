@@ -13,7 +13,7 @@ struct mtx_COO  // COOrdinates
 {
     int *row;
     int *col;
-    float *data;
+    double *data;
     int num_rows;
     int num_cols;
     int num_nonzeros;
@@ -23,7 +23,7 @@ struct mtx_CSR  // Compressed Sparse Row
 {
     int *rowptr;
     int *col;
-    float *data;
+    double *data;
     int num_rows;
     int num_cols;
     int num_nonzeros;
@@ -32,7 +32,7 @@ struct mtx_CSR  // Compressed Sparse Row
 struct mtx_ELL      // ELLiptic (developed by authors of ellipctic package)
 {
     int *col;
-    float *data;
+    double *data;
     int num_rows;
     int num_cols;
     int num_nonzeros;
@@ -43,7 +43,7 @@ struct mtx_ELL      // ELLiptic (developed by authors of ellipctic package)
 struct mtx_JDS      // ELLiptic (developed by authors of ellipctic package)
 {
     int *col;
-    float *data;
+    double *data;
     int *jagged_ptr;
     int *row_permute;
     int max_el_in_row;
@@ -53,7 +53,7 @@ struct mtx_JDS      // ELLiptic (developed by authors of ellipctic package)
     int num_elements;  
 };  
 
-int mtx_COO_create_from_file(struct mtx_COO *mCOO, FILE *f);
+int mtx_COO_create_from_file(struct mtx_COO *mCOO, FILE *f, int transposed);
 int mtx_COO_free(struct mtx_COO *mCOO);
 
 int mtx_CSR_create_from_mtx_COO(struct mtx_CSR *mCSR, struct mtx_COO *mCOO);
@@ -64,6 +64,9 @@ int mtx_ELL_free(struct mtx_ELL *mELL);
 
 int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR);
 int mtx_JDS_free(struct mtx_JDS *mJDS);
+
+void vecPrintInt(int *vecIn, int n);
+void vecPrint(double *vecIn, int n);
 
 #endif
 

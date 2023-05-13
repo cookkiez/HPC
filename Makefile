@@ -13,4 +13,4 @@ build-seq: src/sequential/sequential.c
 build-openmp: src/openmp/openmp.c
 	gcc src/openmp/openmp.c src/mtx_sparse.c --openmp -lm -o build/openmp
 
-build: build-cuda build-seq
+build: build-cuda build-seq build-openmp
