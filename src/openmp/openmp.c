@@ -20,19 +20,20 @@ void printHelp(const char *progName) {
 }
 
 void vecSumCoef(double *vecOut, double *vecInA, double *vecInB, bool subtract, int n, double coef) {
+  #pragma omp parallel for schedule(guided, 1)
   for (int i = 0; i < n; i++)
     vecOut[i] = (subtract) ? (vecInA[i] - coef * vecInB[i]) : (vecInA[i] + coef * vecInB[i]);
 }
 
 void vecLinProd(double *vecOut, double *vecIn, int n, double coef) {
-  #pragma omp parallel for
+  #pragma omp parallel for schedule(guided, 1)
   for (int i = 0; i < n; i++)
     vecOut[i] = coef * vecIn[i];
 }
 
 double vecDotProduct(double *vecInA, double *vecInB, int n) {
   double prod = 0;
-  #pragma omp parallel for reduction (+:prod)
+  #pragma omp parallel for reduction(+:prod) schedule(guided, 1)
   for (int i = 0; i < n; i++)
     prod += vecInA[i] * vecInB[i];
   return prod;
@@ -43,7 +44,8 @@ void mtxVecProduct_JDS(double *vecOut, struct mtx_JDS *mtx, double *vecIn, int n
   memset(vecOut, 0, n * sizeof(double)); // Set output vector to zero
 
   // Multiply each non zero
-  #pragma omp parallel for
+  // dynamic schedule because of unequal load per row (rows have different sizes)
+  #pragma omp parallel for schedule(dynamic, 1)
   for (int r = 0; r < mtx->max_el_in_row; r++) {
     for (int i = mtx->jagged_ptr[r]; i < ((r + 1 < mtx->max_el_in_row) ? mtx->jagged_ptr[r + 1] : mtx->num_nonzeros); i++) {
       if (mtx->row_permute[r] < n)
