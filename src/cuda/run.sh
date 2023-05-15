@@ -1,7 +1,12 @@
-#!/bin/sh
+#!/bin/bash
+
 module load CUDA/10.1.243-GCC-8.3.0
-nvcc sparseMV_template.cu -Xcompiler -O2 mtx_sparse.c -o sparseMV
-#srun --reservation=fri -G1 -n1 sparseMV data/dw8192.mtx
-#srun --reservation=fri -G1 -n1 sparseMV data/pdb1HYS.mtx
-#srun --reservation=fri -G1 -n1 sparseMV data/scircuit.mtx
-srun --reservation=fri -G1 -n1 sparseMV data/test.mtx
+
+srun \
+  --reservation=fri \
+  -G1 \
+  -n1 \
+  --time=00:10:00 \
+  --output=vzr-task1-cuda.txt \
+  --job-name=vzr-task1-cuda \
+  ../../build/sparseMV $@
