@@ -174,7 +174,7 @@ int main(int argc, char *argv[]) {
   double bb = vecDotProduct(vec_b, vec_b, vecSize);
 
   // r_t_0 * r_0
-  double rtr = vecDotProduct(vec_r, vec_r, vecSize) / bb;
+  double rtr = vecDotProduct(vec_r, vec_r, vecSize);
 
   // calculate margin^2
   margin = powf(margin, 2) * bb;
