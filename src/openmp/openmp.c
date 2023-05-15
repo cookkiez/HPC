@@ -19,40 +19,28 @@ void printHelp(const char *progName) {
   fprintf(stderr, "Usage: %s [-n iterations] [-e margin] FILE\n", progName);
 }
 
-void vecPrint(float *vecIn, int n) {
-  printf("[");
-  for (int i = 0; i < n; i++) {
-    if (i == 0)
-      printf("%f", vecIn[i]);
-    else
-      printf(",%f", vecIn[i]);
-  }
-  printf("]\n");
-}
-
-void vecSumCoef(float *vecOut, float *vecInA, float *vecInB, bool subtract, int n, float coef) {
-  #pragma omp parallel for
+void vecSumCoef(double *vecOut, double *vecInA, double *vecInB, bool subtract, int n, double coef) {
   for (int i = 0; i < n; i++)
     vecOut[i] = (subtract) ? (vecInA[i] - coef * vecInB[i]) : (vecInA[i] + coef * vecInB[i]);
 }
 
-void vecLinProd(float *vecOut, float *vecIn, int n, float coef) {
+void vecLinProd(double *vecOut, double *vecIn, int n, double coef) {
   #pragma omp parallel for
   for (int i = 0; i < n; i++)
     vecOut[i] = coef * vecIn[i];
 }
 
-float vecDotProduct(float *vecInA, float *vecInB, int n) {
-  float prod = 0.f;
+double vecDotProduct(double *vecInA, double *vecInB, int n) {
+  double prod = 0;
   #pragma omp parallel for reduction (+:prod)
   for (int i = 0; i < n; i++)
     prod += vecInA[i] * vecInB[i];
   return prod;
 }
 
-void mtxVecProduct_JDS(float *vecOut, struct mtx_JDS *mtx, float *vecIn, int n) {
+void mtxVecProduct_JDS(double *vecOut, struct mtx_JDS *mtx, double *vecIn, int n) {
   // Init value of output vector
-  memset(vecOut, 0, n * sizeof(float)); // Set output vector to zero
+  memset(vecOut, 0, n * sizeof(double)); // Set output vector to zero
 
   // Multiply each non zero
   #pragma omp parallel for
@@ -66,7 +54,7 @@ void mtxVecProduct_JDS(float *vecOut, struct mtx_JDS *mtx, float *vecIn, int n) 
 
 int main(int argc, char *argv[]) {
   uint32_t iterations = 1000;
-  float margin = 0.005;
+  double margin = 0.005;
   bool showIntermediateResult = false;
 
   int c;
@@ -76,7 +64,7 @@ int main(int argc, char *argv[]) {
         sscanf(optarg, "%o", &iterations);
         break;
       case 'e':
-        sscanf(optarg, "%f", &margin);
+        sscanf(optarg, "%lf", &margin);
         break;
       case 's':
         showIntermediateResult = true;
@@ -88,8 +76,6 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
   }
-
-  printf("%o\n", iterations);
 
   if (optind >= argc) {
     printHelp(argv[0]);
@@ -131,12 +117,12 @@ int main(int argc, char *argv[]) {
   int vecSize = mtxCOO.num_cols;
 
   // Temporary
-  float *vec_tmp = (float*)malloc(vecSize * sizeof(float));
+  double *vec_tmp = (double*)malloc(vecSize * sizeof(double));
 
   // Setup initial values
 
   // s = x_0 (for calculation b = As)
-  float *vec_x = (float*)malloc(vecSize * sizeof(float));
+  double *vec_x = (double*)malloc(vecSize * sizeof(double));
   for (int i = 0; i < vecSize; i++)
     vec_x[i] = 1; // Initial s
   //vec_x[0] = 2; vec_x[1] = 1;
@@ -144,7 +130,7 @@ int main(int argc, char *argv[]) {
   vecPrint(vec_x, vecSize);
 
   // b = Ax_0 (generate constant)
-  float *vec_b = (float*)malloc(vecSize * sizeof(float));
+  double *vec_b = (double*)malloc(vecSize * sizeof(double));
   mtxVecProduct_JDS(vec_b, &mtxJDS, vec_x, vecSize);
 
   // x_0 = random
@@ -154,35 +140,35 @@ int main(int argc, char *argv[]) {
   vecPrint(vec_x, vecSize);
 
   // r_0 = b - Ax_0
-  float *vec_r = (float*)malloc(vecSize * sizeof(float));
+  double *vec_r = (double*)malloc(vecSize * sizeof(double));
   mtxVecProduct_JDS(vec_tmp, &mtxJDS, vec_x, vecSize); // Ax_0
   vecSumCoef(vec_r, vec_b, vec_tmp, true, vecSize, 1); // r = b - Ax_0
 
   // r_dash_0 = r_0
-  float *vec_r_dash = (float*)malloc(vecSize * sizeof(float));
-  memcpy(vec_r_dash, vec_r, vecSize * sizeof(float)); 
+  double *vec_r_dash = (double*)malloc(vecSize * sizeof(double));
+  memcpy(vec_r_dash, vec_r, vecSize * sizeof(double)); 
 
   // p_0 = r_0
-  float *vec_p = (float*)malloc(vecSize * sizeof(float));
-  memcpy(vec_p, vec_r, vecSize * sizeof(float)); 
+  double *vec_p = (double*)malloc(vecSize * sizeof(double));
+  memcpy(vec_p, vec_r, vecSize * sizeof(double)); 
 
   // p_dash_0 = r_dash_0
-  float *vec_p_dash = (float*)malloc(vecSize * sizeof(float));
-  memcpy(vec_p_dash, vec_r_dash, vecSize * sizeof(float));
+  double *vec_p_dash = (double*)malloc(vecSize * sizeof(double));
+  memcpy(vec_p_dash, vec_r_dash, vecSize * sizeof(double));
 
   // b_t * b
-  float bb = vecDotProduct(vec_b, vec_b, vecSize);
+  double bb = vecDotProduct(vec_b, vec_b, vecSize);
 
   // r_t_0 * r_0
-  float rtr = vecDotProduct(vec_r, vec_r, vecSize) / bb;
+  double rtr = vecDotProduct(vec_r, vec_r, vecSize);
 
   // calculate margin^2
-  margin = powf(margin, 2);
+  margin = powf(margin, 2) * bb;
   
   double time_start = omp_get_wtime();
 
   // Main loop
-  float alpha, beta, rr, rrn;
+  double alpha, beta, rr, rrn;
   uint32_t k;
   for (k = 0; k < iterations && rtr > margin; k++) {
     // r_dash_t_k * r_k
@@ -228,7 +214,7 @@ int main(int argc, char *argv[]) {
   double time_end = omp_get_wtime();
 
   // Print result
-  printf("Iterations: %o\nResult: ", k);
+  printf("Iterations: %o/%o\nResult: ", k, iterations);
   vecPrint(vec_x, vecSize);
   printf("Elapsed: %.5lf s\n", (double)(time_end - time_start));
   

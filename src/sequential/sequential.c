@@ -229,7 +229,7 @@ int main(int argc, char *argv[]) {
   clock_t time_end = clock();
 
   // Print result
-  printf("Iterations: %o\nResult: ", k);
+  printf("Iterations: %o/%o\nResult: ", k, iterations);
   vecPrint(vec_x, vecSize);
   printf("Elapsed: %lf s\n", (double)(time_end - time_start) / CLOCKS_PER_SEC);
   
