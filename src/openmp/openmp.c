@@ -105,22 +105,21 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Failed to open: %s \n", argv[optind]);
     exit(EXIT_FAILURE);
   }
+  FILE *file2;
+  if ((file2 = fopen(argv[optind], "r")) == NULL) {
+    fprintf(stderr, "Failed to open: %s \n", argv[optind]);
+    exit(EXIT_FAILURE);
+  }
 
   // Create matrix structures
   struct mtx_COO mtxCOO, mtxCOO_t;
   struct mtx_CSR mtxCSR, mtxCSR_t;
   struct mtx_ELL mtxELL, mtxELL_t;
   struct mtx_JDS mtxJDS, mtxJDS_t;
-  if (mtx_COO_create_from_file(&mtxCOO, file) != 0)
+  if (mtx_COO_create_from_file(&mtxCOO, file, false) != 0)
     exit(EXIT_FAILURE);
-  
-  // Create tansposed matrix
-  mtxCOO_t.col = mtxCOO.row;
-  mtxCOO_t.row = mtxCOO.col;
-  mtxCOO_t.data = mtxCOO.data;
-  mtxCOO_t.num_nonzeros = mtxCOO.num_nonzeros;
-  mtxCOO_t.num_cols = mtxCOO.num_rows;
-  mtxCOO_t.num_rows = mtxCOO.num_cols;
+  if (mtx_COO_create_from_file(&mtxCOO_t, file, true) != 0)
+    exit(EXIT_FAILURE);
 
   mtx_CSR_create_from_mtx_COO(&mtxCSR, &mtxCOO);
   mtx_CSR_create_from_mtx_COO(&mtxCSR_t, &mtxCOO_t);

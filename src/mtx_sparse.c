@@ -1,5 +1,7 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include "mtx_sparse.h"
 
 struct mtx_MM
@@ -26,7 +28,7 @@ int mtx_COO_compare(const void * a, const void * b)
         return 0;
 }
 
-int mtx_COO_create_from_file(struct mtx_COO *mCOO, FILE *f, int transposed)
+int mtx_COO_create_from_file(struct mtx_COO *mCOO, FILE *f, bool transposed)
 {
     char line[1024];
     // skip comments

@@ -113,10 +113,10 @@ int main(int argc, char *argv[]) {
   struct mtx_ELL mtxELL, mtxELL_t;
   struct mtx_JDS mtxJDS, mtxJDS_t;
 
-  if (mtx_COO_create_from_file(&mtxCOO, file, 0) != 0)
+  if (mtx_COO_create_from_file(&mtxCOO, file, false) != 0)
     exit(EXIT_FAILURE);
   
-  if (mtx_COO_create_from_file(&mtxCOO_t, file2, 1) != 0)
+  if (mtx_COO_create_from_file(&mtxCOO_t, file2, true) != 0)
     exit(EXIT_FAILURE);
 
   mtx_CSR_create_from_mtx_COO(&mtxCSR, &mtxCOO);
@@ -124,7 +124,6 @@ int main(int argc, char *argv[]) {
   mtx_ELL_create_from_mtx_CSR(&mtxELL, &mtxCSR);
   mtx_ELL_create_from_mtx_CSR(&mtxELL_t, &mtxCSR_t);
   mtx_JDS_create_from_mtx_CSR(&mtxJDS, &mtxCSR);
-  //printf("TRANSPOSED:\n");
   mtx_JDS_create_from_mtx_CSR(&mtxJDS_t, &mtxCSR_t);
   int vecSize = mtxCOO.num_cols;
 

@@ -7,6 +7,7 @@ extern "C" {
 #ifndef MTX_SPARSE
 #define MTX_SPARSE
 
+#include <stdbool.h>
 #include <stdio.h>
 
 struct mtx_COO  // COOrdinates
@@ -53,7 +54,7 @@ struct mtx_JDS      // ELLiptic (developed by authors of ellipctic package)
     int num_elements;  
 };  
 
-int mtx_COO_create_from_file(struct mtx_COO *mCOO, FILE *f, int transposed);
+int mtx_COO_create_from_file(struct mtx_COO *mCOO, FILE *f, bool transposed);
 int mtx_COO_free(struct mtx_COO *mCOO);
 
 int mtx_CSR_create_from_mtx_COO(struct mtx_CSR *mCSR, struct mtx_COO *mCOO);
