@@ -107,8 +107,7 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
   // Create matrix structures
-  struct mtx_COO mtxCOO;
-  struct mtx_COO mtxCOO_t;
+  struct mtx_COO mtxCOO, mtxCOO_t;
   struct mtx_CSR mtxCSR, mtxCSR_t;
   struct mtx_ELL mtxELL, mtxELL_t;
   struct mtx_JDS mtxJDS, mtxJDS_t;

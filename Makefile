@@ -1,8 +1,8 @@
 SHELL:=/bin/bash
 
-build-cuda: src/cuda/sparseMV_template.cu
+build-cuda: src/cuda/cuda.cu
 	module load CUDA/10.1.243-GCC-8.3.0
-	nvcc src/cuda/sparseMV_template.cu -Xcompiler -O2 src/mtx_sparse.c -o build/sparseMV --expt-relaxed-constexpr
+	nvcc src/cuda/cuda.cu -Xcompiler -O2 src/mtx_sparse.c -o build/cuda --expt-relaxed-constexpr
 
 build-seq: src/sequential/sequential.c
 	gcc src/sequential/sequential.c src/mtx_sparse.c -lm -O2 -Wall -Wno-unused-variable -o build/sequential

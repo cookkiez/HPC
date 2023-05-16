@@ -16,6 +16,8 @@
 
 #include "../mtx_sparse.h"
 
+#define PROCESS_ROOT 0
+
 void printHelp(const char *progName) {
   fprintf(stderr, "Usage: %s [-n iterations] [-e margin] FILE\n", progName);
 }
@@ -60,31 +62,6 @@ int main(int argc, char *argv[]) {
   double margin = 0.005;
   bool showIntermediateResult = false;
 
-  int c;
-  while ((c = getopt(argc, argv, "n:e:s")) != -1) {
-    switch (c) {
-      case 'n':
-        sscanf(optarg, "%o", &iterations);
-        break;
-      case 'e':
-        sscanf(optarg, "%lf", &margin);
-        break;
-      case 's':
-        showIntermediateResult = true;
-        break;
-      case 'h':
-      case '?':
-      default:
-        printHelp(argv[0]);
-        exit(EXIT_FAILURE);
-    }
-  }
-
-  if (optind >= argc) {
-    printHelp(argv[0]);
-    exit(EXIT_FAILURE);
-  }
-
   // TODO: Cleanup
   int rank; // process rank 
 	int num_p; // total number of processes 
@@ -105,6 +82,32 @@ int main(int argc, char *argv[]) {
   int vecSize = 0;
   struct mtx_JDS mtxJDS, mtxJDS_t;
   if (rank == 0) {
+    // Read arguments
+    int c;
+    while ((c = getopt(argc, argv, "n:e:s")) != -1) {
+      switch (c) {
+        case 'n':
+          sscanf(optarg, "%o", &iterations);
+          break;
+        case 'e':
+          sscanf(optarg, "%lf", &margin);
+          break;
+        case 's':
+          showIntermediateResult = true;
+          break;
+        case 'h':
+        case '?':
+        default:
+          printHelp(argv[0]);
+          exit(EXIT_FAILURE);
+      }
+    }
+
+    if (optind >= argc) {
+      printHelp(argv[0]);
+      exit(EXIT_FAILURE);
+    }
+
     // Create matrix structures
     struct mtx_COO mtxCOO, mtxCOO_t;
     struct mtx_CSR mtxCSR, mtxCSR_t;
@@ -147,6 +150,20 @@ int main(int argc, char *argv[]) {
 
     // TODO: Load calculate load share
   }
+
+  // Send settings to all processes
+  MPI_Bcast(&iterations, 1, MPI_UINT32_T, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(&margin, 1, MPI_DOUBLE, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(&vecSize, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
+
+  // TODO: Don't forget to init mtxJDS so other processes can receive data
+  // Notes (ideas, not fatch):
+  //  to each process copy:
+  //  - selected part of value
+  //  - selected par of column (same position & size)
+  //  - jagged_ptr values of column count that will be processed by this process (scatter count array between processes)
+  //  - row_permute needs to be accounted on root process when puting things back together
+  // - margin needs to be devided by number of processes ?
 
   // TODO: Scatterv (matrix rows)
 
