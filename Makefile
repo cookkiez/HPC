@@ -12,6 +12,6 @@ build-openmp: src/openmp/openmp.c
 
 build-openmpi: src/openmpi/openmpi.c
 	module load OpenMPI/4.1.0-GCC-10.2.0 
-	mpicc src/openmpi/openmpi.c src/mtx_sparse.c --openmp -lm -O2 -o build/openmpi
+	mpicc src/openmpi/openmpi.c src/mtx_sparse.c --openmp -lm -O2 -Wall -o build/openmpi
 
 build: build-cuda build-seq build-openmp build-openmpi

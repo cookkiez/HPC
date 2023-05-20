@@ -56,32 +56,202 @@ void mtxVecProduct_JDS(double *vecOut, struct mtx_JDS *mtx, double *vecIn, int n
   }
 }
 
-int main(int argc, char *argv[]) {
-  //uint32_t iterations = 1000;
-  double margin = 0.005;
-  bool showIntermediateResult = false;
+void init_proc_mtx(struct mtx_JDS *mtx_new, int rows, int max_els, 
+                  int num_cols, int num_nonzeros, int num_elements) {
+  //printf("INIT: %d %d %d %d %d\n", rows, max_els, num_cols, num_nonzeros, num_elements);
+  mtx_new->num_rows = rows;
+  mtx_new->max_el_in_row = max_els;
+  mtx_new->num_cols = num_cols;
+  mtx_new->num_nonzeros = num_nonzeros;
+  mtx_new->num_elements = num_elements;
+  mtx_new->data = (double *)calloc(num_elements, sizeof(double));
+  mtx_new->col = (int *) calloc(num_elements, sizeof(int));
+  mtx_new->row_permute = (int *) calloc(rows, sizeof(int));
+  mtx_new->jagged_ptr = (int *) calloc(max_els, sizeof(int));
+}
 
-  // TODO: Cleanup
+
+void get_matrix_from_file(struct mtx_JDS *proc_mtxJDS, bool transposed, char *argv[]){
+    struct mtx_COO mtxCOO;
+    struct mtx_CSR mtxCSR;
+    struct mtx_ELL mtxELL;
+
+      // Open file with matrix A
+      FILE *file;
+      if ((file = fopen(argv[optind], "r")) == NULL) {
+        fprintf(stderr, "Failed to open: %s \n", argv[optind]);
+        exit(EXIT_FAILURE);
+      }
+      if (mtx_COO_create_from_file(&mtxCOO, file, transposed) != 0)
+        exit(EXIT_FAILURE);
+
+    mtx_CSR_create_from_mtx_COO(&mtxCSR, &mtxCOO);
+    mtx_ELL_create_from_mtx_CSR(&mtxELL, &mtxCSR);
+    mtx_JDS_create_from_mtx_CSR(proc_mtxJDS, &mtxCSR);
+    
+    // Clear memory
+    mtx_COO_free(&mtxCOO);
+    mtx_CSR_free(&mtxCSR);
+    mtx_ELL_free(&mtxELL);
+}
+
+void get_matrix(struct mtx_JDS *proc_mtxJDS, bool transposed, int rank, int num_p, char *argv[]) {
+  int proc_jag_start, proc_jag_end, proc_actual_rows;
+  int proc_num_rows, proc_num_cols, proc_num_els, proc_max_el_in_row, proc_num_nonzeros;
+  int *jags_start = malloc(sizeof(int)* num_p);
+  int *jags_end = malloc(sizeof(int)* num_p);
+  int *actual_rows = malloc(sizeof(int)* num_p);
+
+  if(rank == 0) {
+    // Create matrix structures
+    get_matrix_from_file(proc_mtxJDS, transposed, argv);
+    proc_num_rows = proc_mtxJDS->num_rows;
+    proc_num_cols = proc_mtxJDS->num_cols;
+    proc_num_els = proc_mtxJDS->num_elements;
+    proc_max_el_in_row = proc_mtxJDS->max_el_in_row;
+    proc_num_nonzeros = proc_mtxJDS->num_nonzeros;
+
+    //Send matrix to other processes
+    memset(jags_start, 0,  num_p * sizeof(int));
+    memset(jags_end, 0,  num_p * sizeof(int));
+    //jags_start[0] = 0;
+    int curr_proc = 0;
+    int curr_rows = 0;
+    int rows_per_processor = proc_mtxJDS->num_rows / num_p;
+    int rows_per_proc_remainder = proc_mtxJDS->num_rows % num_p;
+    //printf("%d %d %d %d %d %d\n\n", rows_per_processor, rows_per_proc_remainder, proc_mtxJDS->jagged_ptr[proc_mtxJDS->max_el_in_row - 1], num_p, proc_mtxJDS->num_rows, proc_mtxJDS->max_el_in_row);
+    for (int j = 0; j < proc_mtxJDS->max_el_in_row; j++) {
+      int els_in_row = proc_mtxJDS->max_el_in_row - j;
+      bool trigger = false;
+      //printf("%d %d %d %d\n", els_in_row, j, proc_mtxJDS->jagged_ptr[j], proc_mtxJDS->jagged_ptr[j + 1]);
+      for (int row = proc_mtxJDS->jagged_ptr[j]; row < ((j + 1 < proc_mtxJDS->max_el_in_row) ? proc_mtxJDS->jagged_ptr[j + 1] : proc_mtxJDS->num_nonzeros); row += els_in_row) {        
+        curr_rows++;
+        if (curr_rows == rows_per_processor && rows_per_proc_remainder > 0) { 
+          rows_per_proc_remainder--;
+          curr_rows++;
+          row += els_in_row;
+        }
+        //printf("%d %d %d\n", row, curr_rows, curr_proc);
+        if (curr_rows >= rows_per_processor) {
+          jags_end[curr_proc] = row; 
+          actual_rows[curr_proc] = curr_rows;
+          curr_proc++;
+          if (curr_proc >= num_p) { trigger = true; break; } 
+          jags_start[curr_proc] = row; 
+          curr_rows = 0;
+        }
+      }
+      if (trigger) { break; }
+    }
+    jags_end[curr_proc - 1] = proc_mtxJDS->jagged_ptr[proc_mtxJDS->max_el_in_row]; 
+    //printf("\n\nERROR\n\n");
+    //printf("%d %d ,\n", proc_mtxJDS->jagged_ptr[proc_mtxJDS->max_el_in_row], curr_proc);
+    // printf("MATRIX:\n");
+    // vecPrint(proc_mtxJDS->data, proc_mtxJDS->num_nonzeros);
+    // vecPrintInt(proc_mtxJDS->col, proc_mtxJDS->num_nonzeros);
+    // vecPrintInt(proc_mtxJDS->row_permute, proc_mtxJDS->num_rows);
+    // vecPrintInt(proc_mtxJDS->jagged_ptr, proc_mtxJDS->max_el_in_row);
+    // printf("DIVISION: \n");
+    vecPrintInt(jags_start, num_p);
+    vecPrintInt(jags_end, num_p);
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Bcast(&proc_num_rows, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(&proc_num_cols, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(&proc_num_els, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(&proc_max_el_in_row, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(&proc_num_nonzeros, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
+  if (rank != 0) {
+    init_proc_mtx(proc_mtxJDS, proc_num_rows, proc_max_el_in_row, 
+                  proc_num_cols, proc_num_nonzeros, proc_num_els);
+  }
+  //printf("\n\nGOT OUT OF INIT\n\n");
+  // MPI_Scatterv(mtxJDS->row_permute, sendcounts_rows, displs, MPI_INT, &proc_mtxJDS->row_permute, proc_mtxJDS->num_rows, MPI_INT, 0, MPI_COMM_WORLD);
+  // MPI_Scatter(sendcounts_rows, 1, MPI_INT, &proc_mtxJDS->num_rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  MPI_Scatter(jags_start, 1, MPI_INT, &proc_jag_start, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Scatter(jags_end, 1, MPI_INT, &proc_jag_end, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Scatter(actual_rows, 1, MPI_INT, &proc_actual_rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  //my_jags = (int*)malloc(proc_max_el_in_row * sizeof(int));
+  //int my_jag = 0;
+  //for (int i = 0; i < num_p; i++) { displs[i] = -1;}
+  //displs[0] = 0;
+  //printf("MAX EL IN ROW:_ %d %d %d\n", proc_max_el_in_row, proc_mtxJDS->jagged_ptr[0], proc_mtxJDS->jagged_ptr[1]);
+  //MPI_Bcast(sendcounts_jags, proc_max_el_in_row, MPI_INT, 0, MPI_COMM_WORLD);
+  //MPI_Scatterv(proc_mtxJDS->jagged_ptr, sendcounts_jags, displs, MPI_INT, &my_jags, proc_max_el_in_row, MPI_INT, 0, MPI_COMM_WORLD);
+  //printf("PRINT JAGS :");
+  //vecPrintInt(my_jags, proc_max_el_in_row);
+
+  MPI_Bcast(proc_mtxJDS->jagged_ptr, proc_max_el_in_row, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(proc_mtxJDS->row_permute, proc_num_rows, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(proc_mtxJDS->col, proc_num_els, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(proc_mtxJDS->data, proc_num_els, MPI_DOUBLE, PROCESS_ROOT, MPI_COMM_WORLD);
+  
+  for (int i = 0; i < proc_max_el_in_row; i++) {
+    if (proc_mtxJDS->jagged_ptr[i] < proc_jag_start) { proc_mtxJDS->jagged_ptr[i] = proc_jag_start; }
+    else if (proc_mtxJDS->jagged_ptr[i] > proc_jag_end) { proc_mtxJDS->jagged_ptr[i] = proc_jag_end; }
+  }
+  // int num_els = proc_jag_end - proc_jag_start;
+  // int num_cols = proc_mtxJDS->num_cols;
+  // int num_nonzeros = num_els;
+  // int num_rows = proc_actual_rows;
+  // struct mtx_JDS temp_mtxJDS; 
+  // init_proc_mtx(&temp_mtxJDS, num_rows, max_el_in_row, num_cols, num_nonzeros, num_els);
+  // printf("TEST: %d:%d %d\n\n", proc_jag_start, proc_jag_end, max_el_in_row);
+  // vecPrintInt(proc_mtxJDS->jagged_ptr, proc_max_el_in_row);
+  // vecPrintInt(proc_mtxJDS->col, proc_num_els);
+  // vecPrint(proc_mtxJDS->data, proc_num_els);
+  // vecPrintInt(proc_mtxJDS->row_permute, proc_num_rows);
+  // int data_ix = 0;
+  // temp_mtxJDS.jagged_ptr[0] = 0;
+  // int jag_ix = 0;
+  // for (int r = 0; r < proc_mtxJDS->max_el_in_row; r++) {
+  //   bool trigger = false;
+  //   for (int i = proc_mtxJDS->jagged_ptr[r]; i < ((r + 1 < proc_mtxJDS->max_el_in_row) ? proc_mtxJDS->jagged_ptr[r + 1] : proc_mtxJDS->num_nonzeros); i++) {
+  //     if (proc_mtxJDS->row_permute[r] < proc_mtxJDS->num_cols){
+  //       int row = proc_mtxJDS->row_permute[r];
+  //       temp_mtxJDS.row_permute[r] = row;
+  //       temp_mtxJDS.jagged_ptr[jag_ix] = proc_mtxJDS->jagged_ptr[r] - proc_jag_start;
+  //       int el = proc_mtxJDS->data[i];
+  //       int col = proc_mtxJDS->col[i];
+  //       temp_mtxJDS.data[data_ix] = el;
+  //       temp_mtxJDS.col[data_ix] = col;
+  //       data_ix++;
+  //       trigger = true;
+  //     }
+  //   }
+  //   if (trigger) { jag_ix++; }
+  // }
+  // while (jag_ix < max_el_in_row && temp_mtxJDS.jagged_ptr[jag_ix] == 0) { temp_mtxJDS.jagged_ptr[jag_ix] = proc_jag_end - proc_jag_start; jag_ix++; }
+
+  // vecPrintInt(temp_mtxJDS.jagged_ptr, max_el_in_row);
+  // vecPrintInt(temp_mtxJDS.col, num_els);
+  // vecPrint(temp_mtxJDS.data, num_els);
+  // vecPrintInt(temp_mtxJDS.row_permute, num_rows);
+}
+
+int main(int argc, char *argv[]) {
+  uint32_t iterations = 1000;
+  double margin = 1e-8;
+  bool showIntermediateResult = false;
   int rank; // process rank 
 	int num_p; // total number of processes 
-	int flag = 0; // request status flag
-	char node_name[MPI_MAX_PROCESSOR_NAME]; //node name
-	int name_len; //true length of node name
   double *vec_b, *vec_x;
-  int proc_jag_start, proc_jag_end;
-  printf("TEST %d %s \n", argc, *argv);
+  
+  
 	MPI_Init(&argc, &argv); // initialize MPI 
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank); // get process rank 
 	MPI_Comm_size(MPI_COMM_WORLD, &num_p); // get number of processes
-	MPI_Get_processor_name(node_name, &name_len); // get node name
 	
-	printf("Process %d/%d\n", rank, num_p);
+	// printf("Process %d/%d\n", rank, num_p);
 
   // Main process
   int vecSize = 0;
-  struct mtx_JDS mtxJDS, mtxJDS_t;
+  struct mtx_JDS proc_mtxJDS, proc_mtxJDS_t, mtxJDS;
+  
   if (rank == 0) {
-    // Read arguments
+  // Read arguments
     int c;
     while ((c = getopt(argc, argv, "n:e:s")) != -1) {
       switch (c) {
@@ -101,131 +271,63 @@ int main(int argc, char *argv[]) {
           exit(EXIT_FAILURE);
       }
     }
-
     if (optind >= argc) {
       printHelp(argv[0]);
       exit(EXIT_FAILURE);
     }
-
-    // Create matrix structures
-    struct mtx_COO mtxCOO, mtxCOO_t;
-    struct mtx_CSR mtxCSR, mtxCSR_t;
-    struct mtx_ELL mtxELL, mtxELL_t;
-
-    // Open file with matrix A
-    FILE *file;
-    if ((file = fopen(argv[optind], "r")) == NULL) {
-      fprintf(stderr, "Failed to open: %s \n", argv[optind]);
-      exit(EXIT_FAILURE);
-    }
-    FILE *file2;
-    if ((file2 = fopen(argv[optind], "r")) == NULL) {
-      fprintf(stderr, "Failed to open: %s \n", argv[optind]);
-      exit(EXIT_FAILURE);
-    }
-
-    if (mtx_COO_create_from_file(&mtxCOO, file, false) != 0)
-      exit(EXIT_FAILURE);
-    if (mtx_COO_create_from_file(&mtxCOO_t, file, true) != 0)
-      exit(EXIT_FAILURE);
-
-    mtx_CSR_create_from_mtx_COO(&mtxCSR, &mtxCOO);
-    mtx_CSR_create_from_mtx_COO(&mtxCSR_t, &mtxCOO_t);
-    mtx_ELL_create_from_mtx_CSR(&mtxELL, &mtxCSR);
-    mtx_ELL_create_from_mtx_CSR(&mtxELL_t, &mtxCSR_t);
-    mtx_JDS_create_from_mtx_CSR(&mtxJDS, &mtxCSR);
-    mtx_JDS_create_from_mtx_CSR(&mtxJDS_t, &mtxCSR_t);
-
-    vecSize = mtxCOO.num_cols;
-
-    // Clear memory
-    mtx_COO_free(&mtxCOO);
-    mtx_CSR_free(&mtxCSR);
-    mtx_CSR_free(&mtxCSR_t);
-    mtx_ELL_free(&mtxELL);
-    mtx_ELL_free(&mtxELL_t);
-
+    get_matrix_from_file(&mtxJDS, false, argv);
+  }
+  get_matrix(&proc_mtxJDS, false, rank, num_p, argv);
+  get_matrix(&proc_mtxJDS_t, true, rank, num_p, argv);
+  //printf("AFTER\n:");
+  // vecPrintInt(proc_mtxJDS.jagged_ptr, proc_mtxJDS.max_el_in_row);
+  // vecPrintInt(proc_mtxJDS.col, proc_mtxJDS.num_cols);
+  // vecPrint(proc_mtxJDS.data, proc_mtxJDS.num_elements);
+  // vecPrintInt(proc_mtxJDS.row_permute, proc_mtxJDS.num_rows);
+  // vecPrintInt(proc_mtxJDS_t.jagged_ptr, proc_mtxJDS_t.max_el_in_row);
+  // vecPrintInt(proc_mtxJDS_t.col, proc_mtxJDS_t.num_cols);
+  // vecPrint(proc_mtxJDS_t.data, proc_mtxJDS_t.num_elements);
+  // vecPrintInt(proc_mtxJDS_t.row_permute, proc_mtxJDS_t.num_rows);
+  vecSize = proc_mtxJDS.num_cols;
+  vec_b = (double*)malloc(vecSize * sizeof(double));
+  vec_x = (double*)malloc(vecSize * sizeof(double));
+  if (rank == 0) {
     // Setup initial values
     // s = x_0 (for calculation b = As)
-    vec_x = (double*)malloc(vecSize * sizeof(double));
     for (int i = 0; i < vecSize; i++)
       vec_x[i] = 1; // Initial s
     printf("Correct solution: ");
     vecPrint(vec_x, vecSize);
 
+    // vecPrintInt(mtxJDS.jagged_ptr, mtxJDS.max_el_in_row);
+    // vecPrintInt(mtxJDS.col, mtxJDS.num_cols);
+    // vecPrint(mtxJDS.data, mtxJDS.num_elements);
+    // vecPrintInt(mtxJDS.row_permute, mtxJDS.num_rows);
+
     // b = Ax_0 (generate constant)
-    vec_b = (double*)malloc(vecSize * sizeof(double));
     mtxVecProduct_JDS(vec_b, &mtxJDS, vec_x, vecSize);
+    printf("B vector: ");
+    vecPrint(vec_b, vecSize);
 
     // Init random
     srand(time(NULL));
 
     // x_0 = random
     for (int i = 0; i < vecSize; i++)
-      vec_x[i] = rand() % 10 + 1; // Initial x_0 value (generate randomly [0, 9])
+      vec_x[i] = 0;//rand() % 10 + 1; // Initial x_0 value (generate randomly [0, 9])
     printf("x_0: ");
     vecPrint(vec_x, vecSize);
-
-    // Send settings to all processes
-    MPI_Bcast(&iterations, 1, MPI_UINT32_T, PROCESS_ROOT, MPI_COMM_WORLD);
-    MPI_Bcast(&margin, 1, MPI_DOUBLE, PROCESS_ROOT, MPI_COMM_WORLD);
-    MPI_Bcast(&vecSize, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
-    MPI_Bcast(vec_b, vecSize, MPI_DOUBLE, PROCESS_ROOT, MPI_COMM_WORLD);
-    MPI_Bcast(vec_x, vecSize, MPI_DOUBLE, PROCESS_ROOT, MPI_COMM_WORLD);
-
-    // Send matrix to other processes
-    int *sendcounts_rows = malloc(sizeof(int) * num_p);
-    int *displs = (int *)malloc(num_p * sizeof(int)); 
-    memset(displs, 0,  num_p * sizeof(int));
-    int *jags_start = malloc(sizeof(int)* num_p);
-    int *jags_end = malloc(sizeof(int)* num_p);
-    jags_start[0] = 0;
-    int curr_proc = 0;
-    int curr_rows = 0;
-    int rows_per_processor = mtxJDS.num_rows / num_p;
-    int rows_per_proc_remainder = mtxJDS.num_rows % num_p;
-    for (int j = 0; j < mtxJDS.max_el_in_row; j++) {
-      int els_in_row = mtxJDS.max_el_in_row - j;
-      for (int row = mtxJDS.jagged_ptr[j]; row < ((j + 1 < mtxJDS.max_el_in_row) ? mtxJDS.jagged_ptr[j + 1] : mtxJDS.num_nonzeros); row += els_in_row) {        
-        curr_rows++;
-        if (curr_rows == rows_per_processor && rows_per_proc_remainder > 0) { 
-          rows_per_proc_remainder--;
-          curr_rows++;
-          row += els_in_row;
-        }
-        if (curr_rows >= rows_per_processor) {
-          sendcounts_rows[curr_proc] = curr_rows;
-          jags_end[curr_proc] = row; 
-          curr_proc++;
-          jags_start[curr_proc] = row; 
-          curr_rows = 0;
-        }
-      }
-    }
-
-    MPI_Scatterv(mtxJDS.row_permute, sendcounts_rows, displs, MPI_INT, &mtxJDS.row_permute, mtxJDS.num_rows, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Scatter(jags_start, num_p, MPI_INT, &proc_jag_start, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Scatter(jags_end, num_p, MPI_INT, &proc_jag_end, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    // Scatter jags
-    int *sendcounts_jags = malloc(sizeof(int) * num_p);
-    int curr_jags = 0;
-    int jags_per_processor = mtxJDS.num_nonzeros / num_p;
-    memset(sendcounts_jags, jags_per_processor, num_p * sizeof(int));
-    int jags_per_proc_remainder = mtxJDS.num_nonzeros % num_p;
-    int i = 0;
-    while (jags_per_proc_remainder > 0) {
-      jags_per_proc_remainder--;
-      sendcounts_jags[i]++;
-      i++;
-    }
-    
-    memset(displs, -1, num_p * sizeof(int));
-    displs[0] = 0;
-    MPI_Scatterv(mtxJDS.jagged_ptr, sendcounts_jags, displs, MPI_INT, &mtxJDS.jagged_ptr, mtxJDS.max_el_in_row, MPI_INT, 0, MPI_COMM_WORLD);
   }
+
+  // Send settings to all processes
+  MPI_Bcast(&iterations, 1, MPI_UINT32_T, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(&margin, 1, MPI_DOUBLE, PROCESS_ROOT, MPI_COMM_WORLD);
+  // MPI_Bcast(&vecSize, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(vec_b, vecSize, MPI_DOUBLE, PROCESS_ROOT, MPI_COMM_WORLD);
+  MPI_Bcast(vec_x, vecSize, MPI_DOUBLE, PROCESS_ROOT, MPI_COMM_WORLD);
   MPI_Barrier(MPI_COMM_WORLD);
-  
+  // vecPrint(vec_x, vecSize);
+  // vecPrint(vec_b, vecSize);
   // TODO: Don't forget to init mtxJDS so other processes can receive data
   // Notes (ideas, not fatch):
   //  to each process copy:
@@ -236,14 +338,17 @@ int main(int argc, char *argv[]) {
   // - margin needs to be devided by number of processes?
 
   // TODO: Scatterv (matrix rows)
-
-  double local_margin = margin / num_p;
+  //printf("PROCESS: %d, Jags: %d-%d %d %d\n ", rank, proc_jag_start, proc_jag_end, proc_mtxJDS.num_rows, vecSize);
+  //vecPrintInt(proc_mtxJDS.jagged_ptr, proc_mtxJDS.max_el_in_row);
+  //vecPrintInt(proc_mtxJDS.row_permute, proc_mtxJDS.num_rows);
+  
   // Temporary
-  double *vec_tmp = (double*)malloc(vecSize * sizeof(double));
 
-  // r_0 = b - Ax_0
+  double *vec_tmp = (double*)malloc(vecSize * sizeof(double));
+  
+  // // r_0 = b - Ax_0
   double *vec_r = (double*)malloc(vecSize * sizeof(double));
-  mtxVecProduct_JDS(vec_tmp, &mtxJDS, vec_x, vecSize); // Ax_0
+  mtxVecProduct_JDS(vec_tmp, &proc_mtxJDS, vec_x, vecSize); // Ax_0
   vecSumCoef(vec_r, vec_b, vec_tmp, true, vecSize, 1); // r = b - Ax_0
 
   // r_dash_0 = r_0
@@ -266,7 +371,7 @@ int main(int argc, char *argv[]) {
 
   // calculate margin^2
   margin = powf(margin, 2) * bb;
-  
+  double local_margin = margin / num_p;
   double time_start;
   if (rank == 0) {
     time_start = MPI_Wtime();
@@ -275,12 +380,12 @@ int main(int argc, char *argv[]) {
   // Main loop
   double alpha, beta, rr, rrn;
   uint32_t k;
-  for (k = 0; k < iterations && rtr > margin; k++) {
+  for (k = 0; k < iterations && rtr > local_margin; k++) {
     // r_dash_t_k * r_k
     rr = vecDotProduct(vec_r_dash, vec_r, vecSize);
 
     // Ap_k
-    mtxVecProduct_JDS(vec_tmp, &mtxJDS, vec_p, vecSize);
+    mtxVecProduct_JDS(vec_tmp, &proc_mtxJDS, vec_p, vecSize);
 
     // alpha = (r_dash_t * r_t) / (p_dash_t * A * p)
     alpha = rr / vecDotProduct(vec_p_dash, vec_tmp, vecSize);
@@ -296,7 +401,7 @@ int main(int argc, char *argv[]) {
     vecSumCoef(vec_r, vec_r, vec_tmp, true, vecSize, alpha);
 
     // A_t p_Dash
-    mtxVecProduct_JDS(vec_tmp, &mtxJDS_t, vec_p_dash, vecSize);
+    mtxVecProduct_JDS(vec_tmp, &proc_mtxJDS_t, vec_p_dash, vecSize);
 
     // r_dash_k+1 = r_dash_k - alpha * A_t * p_dash_k
     vecSumCoef(vec_r_dash, vec_r_dash, vec_tmp, true, vecSize, alpha);
@@ -316,22 +421,43 @@ int main(int argc, char *argv[]) {
     vecSumCoef(vec_p_dash, vec_r_dash, vec_p_dash, false, vecSize, beta);
   }
 
+  for (int p = 1; p < num_p; p++) {
+    // ptr to send data, send data size, send data type, receiver, message tag,
+		// ptr to received data, received data size, recevied data type, sender, message tag,
+		// communicator, status
+    double *vec_temp_sum = (double*)malloc(vecSize * sizeof(double));
+		MPI_Sendrecv(vec_x, vecSize, MPI_DOUBLE, 0, 1,
+					 vec_temp_sum, vecSize, MPI_DOUBLE, p, 1, 
+					 MPI_COMM_WORLD, MPI_STATUSES_IGNORE);
+    if (rank == 0) { vecSumCoef(vec_x, vec_x, vec_temp_sum, false, vecSize, 1); }
+  }
   // TODO: gatherv (result)
-
+  printf("PROCESS: %d\n", rank);
+  vecPrint(vec_x, vecSize);
+  printf("MATRIX AT END OF PROCESSING\n:");
+  vecPrintInt(proc_mtxJDS.jagged_ptr, proc_mtxJDS.max_el_in_row);
+  vecPrintInt(proc_mtxJDS.col, proc_mtxJDS.num_cols);
+  vecPrint(proc_mtxJDS.data, proc_mtxJDS.num_elements);
+  vecPrintInt(proc_mtxJDS.row_permute, proc_mtxJDS.num_rows);
+  vecPrintInt(proc_mtxJDS_t.jagged_ptr, proc_mtxJDS_t.max_el_in_row);
+  vecPrintInt(proc_mtxJDS_t.col, proc_mtxJDS_t.num_cols);
+  vecPrint(proc_mtxJDS_t.data, proc_mtxJDS_t.num_elements);
+  vecPrintInt(proc_mtxJDS_t.row_permute, proc_mtxJDS_t.num_rows);
   if (rank == 0) {
     double time_end = MPI_Wtime();
-
+    mtx_JDS_free(&mtxJDS);
     // Print result
     printf("Iterations: %o/%o\nResult: ", k, iterations);
     vecPrint(vec_x, vecSize);
     printf("Elapsed: %.5lf s\n", (double)(time_end - time_start));
   }
   
+  mtx_JDS_free(&proc_mtxJDS_t);
+  mtx_JDS_free(&proc_mtxJDS);
+
   MPI_Finalize();
 
   // Clear memory
-  mtx_JDS_free(&mtxJDS);
-  mtx_JDS_free(&mtxJDS_t);
   free(vec_tmp);
   free(vec_b);
   free(vec_x);
