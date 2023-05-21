@@ -201,13 +201,12 @@ int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR) {
     mJDS->num_elements = mCSR->rowptr[mCSR->num_rows];
 
     /*printf("CSR data: ");
-    vecPrint(mCSR->data, mJDS->num_nonzeros);
+    vecPrint(mCSR->data, mCSR->num_nonzeros);
     printf("CSR col: ");
-    vecPrintInt(mCSR->col, mJDS->num_nonzeros);
+    vecPrintInt(mCSR->col, mCSR->num_nonzeros);
     printf("CSR row_ptr: ");
-    vecPrintInt(mCSR->rowptr, mJDS->num_rows);
-    printf("========\n");*/
-
+    vecPrintInt(mCSR->rowptr, mCSR->num_rows + 1);*/
+    
     if (mJDS->num_nonzeros < 1)
         return 1;
 
@@ -245,12 +244,29 @@ int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR) {
     }
     
     qsort(rows, mCSR->num_rows, 2 * sizeof(int), cmpfun);
-    mJDS->max_el_in_row = rows[1]; // Biggest row is at the start
+    mJDS->max_el_in_row = rows[1]; // Max elements is size of the first row in sorted table (largest row)
 
-    /*printf("***\n");
-    printf("[index, row size]: ");
-    vecPrintInt(rows, mCSR->num_rows * 2);
-    printf("***\n");*/
+    /*printf("[index, row size]: ");
+    vecPrintInt(rows, mCSR->num_rows * 2);*/
+
+    // Count number of rows for each size
+    int *countPerSize = (int*)calloc(mJDS->max_el_in_row, sizeof(int));
+    if (!countPerSize) {
+        fprintf(stderr, "Failed to init countPerSize\n");
+        free(mJDS->data);
+        free(mJDS->col);
+        free(rows);
+        return 1;
+    }
+    for (int s = mJDS->max_el_in_row, i = 0; s >= 1; s--) {
+        while(i < (mCSR->num_rows) * 2 && rows[i + 1] == s) {
+            countPerSize[mJDS->max_el_in_row - s]++; // Increase counter for size
+            i += 2; // Move to next [row index, size]
+        }
+    }
+
+    /*printf("Count per size: ");
+    vecPrintInt(countPerSize, mJDS->max_el_in_row);*/
 
     // Allocate space for row data
     mJDS->row_permute = (int *)calloc(row_notzero, sizeof(int));
@@ -259,28 +275,46 @@ int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR) {
         free(mJDS->data);
         free(mJDS->col);
         free(rows);
+        free(countPerSize);
         return 1;
     }
-    mJDS->jagged_ptr = (int *)calloc(row_notzero, sizeof(int));
+    mJDS->jagged_ptr = (int *)calloc(mJDS->max_el_in_row, sizeof(int));
     if (!(mJDS->jagged_ptr)) {
         fprintf(stderr, "Failed to init mtx jagged_ptr\n");
         free(mJDS->data);
         free(mJDS->col);
         free(rows);
+        free(countPerSize);
         free(mJDS->row_permute);
         return 1;
     }
     
     // Copy row contents
-    for (int r = 0, pos = 0; r < row_notzero; r++) {
+    for (int i = 0; i < mJDS->max_el_in_row; i++)
+        mJDS->jagged_ptr[i] = mJDS->num_elements;
+
+    //printf("El. no %d\n", mJDS->num_elements);
+    //printf("Max el in row %d\n", mJDS->max_el_in_row);
+    //printf("JDS jagged_ptr [initial]: ");
+    //vecPrintInt(mJDS->jagged_ptr, mJDS->max_el_in_row);
+
+    for (int r = 0, pos = 0; r < row_notzero && pos < mJDS->num_elements; r++) {
         if (rows[2 * r + 1] < 1) // Only copy non-zero rows
             break;
-        memcpy(&(mJDS->data[pos]), &(mCSR->data[mCSR->rowptr[rows[2 * r]]]), rows[2 * r + 1] * sizeof(double)); // Copy row data
-        memcpy(&(mJDS->col[pos]), &(mCSR->col[mCSR->rowptr[rows[2 * r]]]), rows[2 * r + 1] * sizeof(int)); // Copy row data
-        mJDS->jagged_ptr[r] = pos; // Save start pos of row
+        for (int i = 0; i < rows[2 * r + 1]; i++) { // Copy row element by element
+            mJDS->data[pos + i * countPerSize[mJDS->max_el_in_row - rows[2 * r + 1]]] = mCSR->data[mCSR->rowptr[rows[2 * r]] + i];
+            mJDS->col[pos + i * countPerSize[mJDS->max_el_in_row - rows[2 * r + 1]]] = mCSR->col[mCSR->rowptr[rows[2 * r]] + i];
+        }
         mJDS->row_permute[r] = rows[2 * r]; // Save row index
 
-        pos += rows[2 * r + 1]; // Increase write position by row size
+        if (r == 0 || rows[2 * r + 1] != rows[2 * (r - 1) + 1])
+            mJDS->jagged_ptr[mJDS->max_el_in_row - rows[2 * r + 1]] = pos; // Save start pos of row
+        
+        if (r + 1 < row_notzero && rows[2 * r + 1] == rows[2 * (r + 1) + 1]) {
+            pos++; // If next row has same size start writing next to start of previous row
+        } else {
+            pos += rows[2 * r + 1]; // Increase write position by row size
+        }
     }
 
     /*printf("JDS data: ");
@@ -288,13 +322,14 @@ int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR) {
     printf("JDS coll: ");
     vecPrintInt(mJDS->col, mJDS->num_nonzeros);
     printf("JDS jagged_ptr: ");
-    vecPrintInt(mJDS->jagged_ptr, row_notzero);
-    printf("JDS data: ");
+    vecPrintInt(mJDS->jagged_ptr, mJDS->max_el_in_row);
+    printf("JDS row_permute: ");
     vecPrintInt(mJDS->row_permute, row_notzero);
     printf("JDS max el in row: ");
     printf("%d\n", mJDS->max_el_in_row);*/
 
     free(rows);
+    free(countPerSize);
     return 0;
 }
 
