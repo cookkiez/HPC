@@ -298,7 +298,7 @@ int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR) {
     //printf("JDS jagged_ptr [initial]: ");
     //vecPrintInt(mJDS->jagged_ptr, mJDS->max_el_in_row);
 
-    for (int r = 0, pos = 0; r < row_notzero && pos < mJDS->num_elements; r++) {
+    for (int r = 0, pos = 0, written = 0; r < row_notzero && pos < mJDS->num_elements; r++) {
         if (rows[2 * r + 1] < 1) // Only copy non-zero rows
             break;
         for (int i = 0; i < rows[2 * r + 1]; i++) { // Copy row element by element
@@ -308,13 +308,14 @@ int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR) {
         mJDS->row_permute[r] = rows[2 * r]; // Save row index
 
         if (r == 0 || rows[2 * r + 1] != rows[2 * (r - 1) + 1])
-            mJDS->jagged_ptr[mJDS->max_el_in_row - rows[2 * r + 1]] = pos; // Save start pos of row
+            mJDS->jagged_ptr[mJDS->max_el_in_row - rows[2 * r + 1]] = written; // Save start pos of row
         
         if (r + 1 < row_notzero && rows[2 * r + 1] == rows[2 * (r + 1) + 1]) {
             pos++; // If next row has same size start writing next to start of previous row
         } else {
             pos += rows[2 * r + 1]; // Increase write position by row size
         }
+        written += rows[2 * r + 1]; // Increase total written values
     }
 
     /*printf("JDS data: ");
