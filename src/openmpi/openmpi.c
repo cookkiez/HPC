@@ -44,16 +44,27 @@ double vecDotProduct(double *vecInA, double *vecInB, int n) {
 void mtxVecProduct_JDS(double *vecOut, struct mtx_JDS *mtx, double *vecIn, int n) {
   // Init value of output vector
   memset(vecOut, 0, n * sizeof(double)); // Set output vector to zero
-
-  // Multiply each non zero
-  // dynamic schedule because of unequal load per row (rows have different sizes)
-  #pragma omp parallel for schedule(dynamic, 1)
-  for (int r = 0; r < mtx->max_el_in_row; r++) {
-    for (int i = mtx->jagged_ptr[r]; i < ((r + 1 < mtx->max_el_in_row) ? mtx->jagged_ptr[r + 1] : mtx->num_nonzeros); i++) {
-      if (mtx->row_permute[r] < n)
-        vecOut[mtx->row_permute[r]] += mtx->data[i] * vecIn[mtx->col[i]];
+  
+  int curr_els = mtx->max_el_in_row;  
+  int rows_computed = 0;
+  for (int i = 0; i < mtx->max_el_in_row; i++) {
+    int jag_start = mtx->jagged_ptr[i];
+    int jag_end = mtx->jagged_ptr[i + 1];
+    if (i == mtx->max_el_in_row - 1) { jag_end = mtx->num_elements; }
+    int curr_els_in_jag = jag_end - jag_start;
+    int curr_els_in_row = curr_els_in_jag / curr_els;
+    for (int data_ix = jag_start; data_ix < jag_end; data_ix += curr_els_in_row) {
+      for (int row_ix = 0; row_ix < curr_els_in_row; row_ix++) {
+        double d = mtx->data[data_ix + row_ix];
+        int d_col = mtx->col[data_ix + row_ix];
+        int d_row = mtx->row_permute[rows_computed + row_ix];
+        vecOut[d_row] += d * vecIn[d_col]; 
+      }
     }
+    rows_computed += curr_els_in_row;
+    curr_els--;
   }
+  //vecPrint(vecOut, mtx->num_rows);
 }
 
 void init_proc_mtx(struct mtx_JDS *mtx_new, int rows, int max_els, 
@@ -143,17 +154,17 @@ void get_matrix(struct mtx_JDS *proc_mtxJDS, bool transposed, int rank, int num_
       }
       if (trigger) { break; }
     }
-    jags_end[curr_proc - 1] = proc_mtxJDS->jagged_ptr[proc_mtxJDS->max_el_in_row]; 
+    jags_end[curr_proc - 1] = proc_mtxJDS->num_elements;
     //printf("\n\nERROR\n\n");
-    //printf("%d %d ,\n", proc_mtxJDS->jagged_ptr[proc_mtxJDS->max_el_in_row], curr_proc);
+    //printf("%d %d %d %d,\n", proc_mtxJDS->jagged_ptr[proc_mtxJDS->max_el_in_row - 1], curr_proc, proc_mtxJDS->max_el_in_row, proc_mtxJDS->num_elements);
     // printf("MATRIX:\n");
     // vecPrint(proc_mtxJDS->data, proc_mtxJDS->num_nonzeros);
     // vecPrintInt(proc_mtxJDS->col, proc_mtxJDS->num_nonzeros);
     // vecPrintInt(proc_mtxJDS->row_permute, proc_mtxJDS->num_rows);
     // vecPrintInt(proc_mtxJDS->jagged_ptr, proc_mtxJDS->max_el_in_row);
-    // printf("DIVISION: \n");
-    vecPrintInt(jags_start, num_p);
-    vecPrintInt(jags_end, num_p);
+    // printf("DIVISION: TRansposed: %d\n", transposed);
+    // vecPrintInt(jags_start, num_p);
+    // vecPrintInt(jags_end, num_p);
   }
   MPI_Barrier(MPI_COMM_WORLD);
   MPI_Bcast(&proc_num_rows, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
@@ -234,19 +245,18 @@ void get_matrix(struct mtx_JDS *proc_mtxJDS, bool transposed, int rank, int num_
 int main(int argc, char *argv[]) {
   uint32_t iterations = 1000;
   double margin = 1e-8;
-  bool showIntermediateResult = false;
+  bool showIntermediateResult = true;
   int rank; // process rank 
 	int num_p; // total number of processes 
   double *vec_b, *vec_x;
-  
   
 	MPI_Init(&argc, &argv); // initialize MPI 
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank); // get process rank 
 	MPI_Comm_size(MPI_COMM_WORLD, &num_p); // get number of processes
 	
-	// printf("Process %d/%d\n", rank, num_p);
+	printf("Process %d/%d\n", rank, num_p);
 
-  // Main process
+  // Main processD
   int vecSize = 0;
   struct mtx_JDS proc_mtxJDS, proc_mtxJDS_t, mtxJDS;
   
@@ -338,10 +348,11 @@ int main(int argc, char *argv[]) {
   // - margin needs to be devided by number of processes?
 
   // TODO: Scatterv (matrix rows)
-  //printf("PROCESS: %d, Jags: %d-%d %d %d\n ", rank, proc_jag_start, proc_jag_end, proc_mtxJDS.num_rows, vecSize);
+  //printf("PROCESS: %d, %d %d\n ", rank, proc_mtxJDS.num_rows, vecSize);
   //vecPrintInt(proc_mtxJDS.jagged_ptr, proc_mtxJDS.max_el_in_row);
   //vecPrintInt(proc_mtxJDS.row_permute, proc_mtxJDS.num_rows);
-  
+  //vecPrint(proc_mtxJDS.data, proc_mtxJDS.num_elements);
+  printf("\n\n");
   // Temporary
 
   double *vec_tmp = (double*)malloc(vecSize * sizeof(double));
@@ -434,15 +445,15 @@ int main(int argc, char *argv[]) {
   // TODO: gatherv (result)
   printf("PROCESS: %d\n", rank);
   vecPrint(vec_x, vecSize);
-  printf("MATRIX AT END OF PROCESSING\n:");
-  vecPrintInt(proc_mtxJDS.jagged_ptr, proc_mtxJDS.max_el_in_row);
-  vecPrintInt(proc_mtxJDS.col, proc_mtxJDS.num_cols);
-  vecPrint(proc_mtxJDS.data, proc_mtxJDS.num_elements);
-  vecPrintInt(proc_mtxJDS.row_permute, proc_mtxJDS.num_rows);
-  vecPrintInt(proc_mtxJDS_t.jagged_ptr, proc_mtxJDS_t.max_el_in_row);
-  vecPrintInt(proc_mtxJDS_t.col, proc_mtxJDS_t.num_cols);
-  vecPrint(proc_mtxJDS_t.data, proc_mtxJDS_t.num_elements);
-  vecPrintInt(proc_mtxJDS_t.row_permute, proc_mtxJDS_t.num_rows);
+  // printf("MATRIX AT END OF PROCESSING\n:");
+  // vecPrintInt(proc_mtxJDS.jagged_ptr, proc_mtxJDS.max_el_in_row);
+  // vecPrintInt(proc_mtxJDS.col, proc_mtxJDS.num_cols);
+  // vecPrint(proc_mtxJDS.data, proc_mtxJDS.num_elements);
+  // vecPrintInt(proc_mtxJDS.row_permute, proc_mtxJDS.num_rows);
+  // vecPrintInt(proc_mtxJDS_t.jagged_ptr, proc_mtxJDS_t.max_el_in_row);
+  // vecPrintInt(proc_mtxJDS_t.col, proc_mtxJDS_t.num_cols);
+  // vecPrint(proc_mtxJDS_t.data, proc_mtxJDS_t.num_elements);
+  // vecPrintInt(proc_mtxJDS_t.row_permute, proc_mtxJDS_t.num_rows);
   if (rank == 0) {
     double time_end = MPI_Wtime();
     mtx_JDS_free(&mtxJDS);
@@ -451,13 +462,13 @@ int main(int argc, char *argv[]) {
     vecPrint(vec_x, vecSize);
     printf("Elapsed: %.5lf s\n", (double)(time_end - time_start));
   }
-  
+  MPI_Barrier(MPI_COMM_WORLD);
   mtx_JDS_free(&proc_mtxJDS_t);
   mtx_JDS_free(&proc_mtxJDS);
 
   MPI_Finalize();
 
-  // Clear memory
+  // Clear memory 
   free(vec_tmp);
   free(vec_b);
   free(vec_x);
