@@ -9,10 +9,11 @@
 
 export OMP_PLACES=cores
 export OMP_PROC_BIND=TRUE
-export OMP_NUM_THREADS=1
+export OMP_NUM_THREADS=32
 
 cd /ceph/grid/home/aj8977/HPC
 make build-openmpi
-srun --mpi=pmix --reservation=fri --nodes=1 --ntasks=2 mpirun build/openmpi data/3diag10.mtx
+module load OpenMPI/4.1.0-GCC-10.2.0 
+srun --reservation=fri --nodes=2 --ntasks=2 --nodelist=nsc-msv007,nsc-msv011 --mpi=pmix build/openmpi data/pdb1HYS.mtx
 wait
 
