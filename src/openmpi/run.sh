@@ -1,19 +1,7 @@
-#!/bin/bash
-#SBATCH --job-name=vzr-task1-openmpi
-#SBATCH --output=vzr-task1-openmpi.txt
-#SBATCH --time=00:10:00
-#SBATCH --nodes=1
-#SBATCH --ntasks=1            # število nalog v poslu, ki se izvajajo hkrati
-#SBATCH --cpus-per-task=1
-#SBATCH --reservation=fri     # rezervacija, če jo imamo; drugače vrstico zbrišemo
-
-export OMP_PLACES=cores
-export OMP_PROC_BIND=TRUE
-export OMP_NUM_THREADS=32
-
+#!/bin/sh
 cd /ceph/grid/home/aj8977/HPC
 make build-openmpi
 module load OpenMPI/4.1.0-GCC-10.2.0 
-srun --reservation=fri --nodes=2 --ntasks=2 --nodelist=nsc-msv007,nsc-msv011 --mpi=pmix build/openmpi data/pdb1HYS.mtx
+srun --reservation=fri --time=02:00:00 --mpi=pmix -N2 -n128 build/openmpi data/wikipedia-20051105.mtx
 wait
 
