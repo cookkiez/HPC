@@ -198,52 +198,108 @@ int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR) {
     mJDS->num_rows = mCSR->num_rows;
     mJDS->num_cols = mCSR->num_cols;
     mJDS->num_elements = mCSR->rowptr[mCSR->num_rows];
-
-    int *ordered = (int *)calloc(mCSR->num_rows, sizeof(int));
     mJDS->data = (double *)calloc(mJDS->num_elements, sizeof(double));
     mJDS->col = (int *) calloc(mJDS->num_elements, sizeof(int));
     mJDS->row_permute = (int *) calloc(mJDS->num_rows, sizeof(int));
     int rows = mJDS->num_rows;
     // Get number of elements in each row
     for (int i = 0; i < rows; i++){
-        ordered[i] = mCSR->rowptr[i + 1] - mCSR->rowptr[i];
+        //ordered[i] = mCSR->rowptr[i + 1] - mCSR->rowptr[i];
         //printf("%d %d %d %d\n", ordered[i], rows, mCSR->rowptr[i], mCSR->rowptr[i + 1]);
         mJDS->row_permute[i] = i;
     }
 
+    // int *rows = (int *)calloc(mCSR->num_rows, 2 * sizeof(int)); // [index, size]
+    // if (!rows) {
+    //     fprintf(stderr, "Failed to init rows\n");
+    //     free(mJDS->data);
+    //     free(mJDS->col);
+    //     return 1;
+    // }
+    // int row_notzero = 0;
+    // for (int i = 0; i < mCSR->num_rows; i++) { // Calculate sizes of rows
+    //     rows[i * 2] = i; // row index
+    //     rows[i * 2 + 1] = mCSR->rowptr[i + 1] - mCSR->rowptr[i]; // row size
+    //     if (rows[i * 2 + 1] > 0)
+    //         row_notzero++;
+    // }
+    
+    // qsort(rows, mCSR->num_rows, 2 * sizeof(int), cmpfun);
+
     //printf("SORT\n");
     //Bubble sort over rows
     //printf("%d \n", rows);
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < rows - i - 1; j++) {
-            if (ordered[j] < ordered[j + 1]) {
-                //printf("%d %d %d %d %d %d\n", j, j + 1,ordered[j], ordered[j + 1], mJDS->row_permute[j], mJDS->row_permute[j + 1]);
-                int temp = ordered[j];
-                ordered[j] = ordered[j + 1];
-                ordered[j + 1] = temp;
-                temp = mJDS->row_permute[j];
-                mJDS->row_permute[j] = mJDS->row_permute[j + 1];
-                mJDS->row_permute[j + 1] = temp;
-            }
-        }
+    // for (int i = 0; i < rows; i++) {
+    //     // printf("Sorting: %d\n", i);
+    //     for (int j = 0; j < rows - i - 1; j++) {
+    //         if (ordered[j] < ordered[j + 1]) {
+    //             //printf("%d %d %d %d %d %d\n", j, j + 1,ordered[j], ordered[j + 1], mJDS->row_permute[j], mJDS->row_permute[j + 1]);
+    //             int temp = ordered[j];
+    //             ordered[j] = ordered[j + 1];
+    //             ordered[j + 1] = temp;
+    //             temp = mJDS->row_permute[j];
+    //             mJDS->row_permute[j] = mJDS->row_permute[j + 1];
+    //             mJDS->row_permute[j + 1] = temp;
+    //         }
+    //     }
+    // }
+
+    int *order_rows = (int *)calloc(mCSR->num_rows, 2 * sizeof(int)); // [index, size]
+    if (!order_rows) {
+        fprintf(stderr, "Failed to init rows\n");
+        free(mJDS->data);
+        free(mJDS->col);
+        return 1;
     }
-    mJDS->max_el_in_row = ordered[0];
+    int row_notzero = 0;
+    for (int i = 0; i < mCSR->num_rows; i++) { // Calculate sizes of rows
+        order_rows[i * 2] = i; // row index
+        order_rows[i * 2 + 1] = mCSR->rowptr[i + 1] - mCSR->rowptr[i]; // row size
+        if (order_rows[i * 2 + 1] > 0)
+            row_notzero++;
+    }
+    
+    qsort(order_rows, mCSR->num_rows, 2 * sizeof(int), cmpfun);
+    // for (int i = 0; i < mCSR->num_rows * 2; i+=2) {
+    //     ordered[ord] = order_rows[i];
+    //     ord++;
+    // }
+    //free(order_rows);
+    //printf("[index, row size]: ");
+    //vecPrintInt(order_rows, mCSR->num_rows * 2);
+    
+    for (int i = 0; i < mCSR->num_rows; i++) {
+        mJDS->row_permute[i] = order_rows[i * 2];
+    }
+    //vecPrintInt(mJDS->row_permute, mCSR->num_rows);
+    //mJDS->max_el_in_row = rows[1];
+    mJDS->max_el_in_row = order_rows[1];
     //printf("%d\n\n", ordered[0]);
-    mJDS->jagged_ptr = (int *) calloc(ordered[0], sizeof(int));
-    int *els_in_jag_row = (int *) calloc(ordered[0], sizeof(int));
+    mJDS->jagged_ptr = (int *) calloc(order_rows[1], sizeof(int));
+    int *els_in_jag_row = (int *) calloc(order_rows[1], sizeof(int));
     mJDS->jagged_ptr[0] = 0;
 
     int data_ix = 0;
-    int curr_els = ordered[0] + 1;
+    int curr_els = order_rows[1] + 1;
     int jag_ix = 0;
+    int prev_ordered = order_rows[1];
     for (int row = 0; row < rows; row++) {
         int curr_row = mJDS->row_permute[row];
-        if (ordered[row] < curr_els) {
+        if (order_rows[row * 2 + 1] < curr_els) {
             //printf("%d, %d, %d\n", curr_row, data_ix, curr_els);
-            curr_els = ordered[row];
+            curr_els = order_rows[row * 2 + 1];
+            while (curr_els < prev_ordered) {
+                // printf("%d %d %d %d\n", curr_els, prev_ordered, jag_ix, data_ix);
+                // fflush(stdout);
+                mJDS->jagged_ptr[jag_ix] = data_ix;
+                els_in_jag_row[jag_ix] = 0;
+                jag_ix++; 
+                prev_ordered--;
+            }
             mJDS->jagged_ptr[jag_ix] = data_ix;
             els_in_jag_row[jag_ix] = curr_els;
             jag_ix++;
+            prev_ordered = curr_els - 1;
         }
         for (int i = mCSR->rowptr[curr_row]; i < mCSR->rowptr[curr_row + 1]; i++) {
             data_ix++;
@@ -256,38 +312,46 @@ int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR) {
     int jag_start = 0;
     int num_rows_jag = 0;
     data_ix = 0;
-    curr_els = ordered[0] + 1;
+    curr_els = order_rows[1] + 1;
     for (int row = 0; row < rows; row++) {
         int curr_row = mJDS->row_permute[row];
-        if (ordered[row] < curr_els) {
-
-            curr_els = ordered[row];
+        if (order_rows[row * 2 + 1] < curr_els) {
+            curr_els = order_rows[row * 2 + 1];
             jag_start = mJDS->jagged_ptr[jag_ix];
             jag_ix++;
             row_in_jag = 0;
             if (curr_els == 0) { break; }
-            //printf("NEW JAG %d, %d, %d\n", jag_start, mJDS->jagged_ptr[jag_ix], curr_els);
             num_rows_jag = (mJDS->jagged_ptr[jag_ix] - jag_start) / curr_els;
+            while(num_rows_jag == 0) {
+                jag_start = mJDS->jagged_ptr[jag_ix];
+                jag_ix++;
+                row_in_jag = 0;
+                if (curr_els == 0) { break; }
+                num_rows_jag = (mJDS->jagged_ptr[jag_ix] - jag_start) / curr_els;
+                // printf("%d %d %d\n", num_rows_jag, jag_ix, curr_els);
+                // fflush(stdout);
+            }
         }
         int cnt = 0;
         for (int i = mCSR->rowptr[curr_row]; i < mCSR->rowptr[curr_row + 1]; i++) {
             int current_ix = jag_start + row_in_jag + num_rows_jag * cnt;
             mJDS->data[current_ix] = mCSR->data[i];
             mJDS->col[current_ix] = mCSR->col[i];
-            //printf("%lf, %d %d %d %d %d %d\n", mCSR->data[i], mCSR->col[i], i, current_ix, cnt, row_in_jag, num_rows_jag);
+            //printf("%lf, %d %d %d %d %d %d %d\n", mCSR->data[i], mCSR->col[i], i, current_ix, cnt, row_in_jag, num_rows_jag, jag_start);
             data_ix++;
             cnt++;
         }
         row_in_jag++;
     }
 
-    // vecPrintInt(mJDS->jagged_ptr, mJDS->max_el_in_row);
+    // vecPrintInt(mJDS->jagged_ptr, mJDS->max_el_in_row + 1);
     // vecPrint(mJDS->data, mJDS->num_nonzeros);
     // vecPrintInt(mJDS->row_permute, mJDS->num_rows);
     // vecPrintInt(mJDS->col, mJDS->num_nonzeros);
     // vecPrintInt(els_in_jag_row, ordered[0]);
-
-    free(ordered);
+    // fflush(stdout);
+    
+    //free(ordered);
     free(els_in_jag_row);
     return 0;
 }
