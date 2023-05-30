@@ -120,11 +120,42 @@ int main(int argc, char *argv[]) {
 
   // Temporary
   double *vec_tmp = (double*)malloc(vecSize * sizeof(double));
+  if (!vec_tmp) {
+    fprintf(stderr, "Failed to allocate memory for vec_temp\n");
+
+    // Memory cleanup
+    mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
+    mtx_CSR_free(&mtxCSR);
+    mtx_CSR_free(&mtxCSR_t);
+    mtx_ELL_free(&mtxELL);
+    mtx_ELL_free(&mtxELL_t);
+    mtx_JDS_free(&mtxJDS);
+    mtx_JDS_free(&mtxJDS_t);
+
+    exit(EXIT_FAILURE);
+  }
 
   // Setup initial values
 
   // s = x_0 (for calculation b = As)
   double *vec_x = (double*)malloc(vecSize * sizeof(double));
+  if (!vec_x) {
+    fprintf(stderr, "Failed to allocate memory for vec_x\n");
+
+    // Memory cleanup
+    mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
+    mtx_CSR_free(&mtxCSR);
+    mtx_CSR_free(&mtxCSR_t);
+    mtx_ELL_free(&mtxELL);
+    mtx_ELL_free(&mtxELL_t);
+    mtx_JDS_free(&mtxJDS);
+    mtx_JDS_free(&mtxJDS_t);
+    free(vec_tmp);
+
+    exit(EXIT_FAILURE);
+  }
   for (int i = 0; i < vecSize; i++)
     vec_x[i] = 1; // Initial s
   //vec_x[0] = 2; vec_x[1] = 1;
@@ -133,6 +164,23 @@ int main(int argc, char *argv[]) {
 
   // b = Ax_0 (generate constant)
   double *vec_b = (double*)malloc(vecSize * sizeof(double));
+  if (!vec_b) {
+    fprintf(stderr, "Failed to allocate memory for vec_b\n");
+
+    // Memory cleanup
+    mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
+    mtx_CSR_free(&mtxCSR);
+    mtx_CSR_free(&mtxCSR_t);
+    mtx_ELL_free(&mtxELL);
+    mtx_ELL_free(&mtxELL_t);
+    mtx_JDS_free(&mtxJDS);
+    mtx_JDS_free(&mtxJDS_t);
+    free(vec_tmp);
+    free(vec_x);
+
+    exit(EXIT_FAILURE);
+  }
   mtxVecProduct_JDS(vec_b, &mtxJDS, vec_x, vecSize);
 
   // x_0 = random
@@ -143,19 +191,97 @@ int main(int argc, char *argv[]) {
 
   // r_0 = b - Ax_0
   double *vec_r = (double*)malloc(vecSize * sizeof(double));
+  if (!vec_r) {
+    fprintf(stderr, "Failed to allocate memory for vec_r\n");
+
+    // Memory cleanup
+    mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
+    mtx_CSR_free(&mtxCSR);
+    mtx_CSR_free(&mtxCSR_t);
+    mtx_ELL_free(&mtxELL);
+    mtx_ELL_free(&mtxELL_t);
+    mtx_JDS_free(&mtxJDS);
+    mtx_JDS_free(&mtxJDS_t);
+    free(vec_tmp);
+    free(vec_x);
+    free(vec_b);
+
+    exit(EXIT_FAILURE);
+  }
   mtxVecProduct_JDS(vec_tmp, &mtxJDS, vec_x, vecSize); // Ax_0
   vecSumCoef(vec_r, vec_b, vec_tmp, true, vecSize, 1); // r = b - Ax_0
 
   // r_dash_0 = r_0
   double *vec_r_dash = (double*)malloc(vecSize * sizeof(double));
+  if (!vec_r_dash) {
+    fprintf(stderr, "Failed to allocate memory for vec_r_dash\n");
+
+    // Memory cleanup
+    mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
+    mtx_CSR_free(&mtxCSR);
+    mtx_CSR_free(&mtxCSR_t);
+    mtx_ELL_free(&mtxELL);
+    mtx_ELL_free(&mtxELL_t);
+    mtx_JDS_free(&mtxJDS);
+    mtx_JDS_free(&mtxJDS_t);
+    free(vec_tmp);
+    free(vec_x);
+    free(vec_b);
+    free(vec_r);
+
+    exit(EXIT_FAILURE);
+  }
   memcpy(vec_r_dash, vec_r, vecSize * sizeof(double)); 
 
   // p_0 = r_0
   double *vec_p = (double*)malloc(vecSize * sizeof(double));
+  if (!vec_p) {
+    fprintf(stderr, "Failed to allocate memory for vec_p\n");
+
+    // Memory cleanup
+    mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
+    mtx_CSR_free(&mtxCSR);
+    mtx_CSR_free(&mtxCSR_t);
+    mtx_ELL_free(&mtxELL);
+    mtx_ELL_free(&mtxELL_t);
+    mtx_JDS_free(&mtxJDS);
+    mtx_JDS_free(&mtxJDS_t);
+    free(vec_tmp);
+    free(vec_x);
+    free(vec_b);
+    free(vec_r);
+    free(vec_r_dash);
+
+    exit(EXIT_FAILURE);
+  }
   memcpy(vec_p, vec_r, vecSize * sizeof(double)); 
 
   // p_dash_0 = r_dash_0
   double *vec_p_dash = (double*)malloc(vecSize * sizeof(double));
+  if (!vec_p_dash) {
+    fprintf(stderr, "Failed to allocate memory for vec_p_dash\n");
+
+    // Memory cleanup
+    mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
+    mtx_CSR_free(&mtxCSR);
+    mtx_CSR_free(&mtxCSR_t);
+    mtx_ELL_free(&mtxELL);
+    mtx_ELL_free(&mtxELL_t);
+    mtx_JDS_free(&mtxJDS);
+    mtx_JDS_free(&mtxJDS_t);
+    free(vec_tmp);
+    free(vec_x);
+    free(vec_b);
+    free(vec_r);
+    free(vec_r_dash);
+    free(vec_p);
+
+    exit(EXIT_FAILURE);
+  }
   memcpy(vec_p_dash, vec_r_dash, vecSize * sizeof(double));
 
   // b_t * b
@@ -222,6 +348,7 @@ int main(int argc, char *argv[]) {
   
   // Clear memory
   mtx_COO_free(&mtxCOO);
+  mtx_COO_free(&mtxCOO_t);
   mtx_CSR_free(&mtxCSR);
   mtx_CSR_free(&mtxCSR_t);
   mtx_ELL_free(&mtxELL);
