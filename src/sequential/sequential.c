@@ -332,6 +332,7 @@ int main(int argc, char *argv[]) {
     
     // alpha = (r_dash_t * r_t) / (p_dash_t * A * p)
     alpha = rr / vecDotProduct(vec_p_dash, vec_tmp, vecSize);
+
     // x_k+1 = x_k + alpha * p_k
     vecSumCoef(vec_x, vec_x, vec_p, false, vecSize, alpha);
     if (showIntermediateResult) {
@@ -353,8 +354,9 @@ int main(int argc, char *argv[]) {
     rrn = vecDotProduct(vec_r_dash, vec_r, vecSize); // r_dash_t_k+1 * r_k+1
     beta = rrn / rr;
     rr = rrn;
+
     // r_t * r
-    rtr = vecDotProduct(vec_r, vec_r, vecSize) / bb;
+    rtr = vecDotProduct(vec_r, vec_r, vecSize);
 
     // p_k+1 = r_k+1 + beta * p_k
     vecSumCoef(vec_p, vec_r, vec_p, false, vecSize, beta);

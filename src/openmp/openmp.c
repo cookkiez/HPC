@@ -204,7 +204,7 @@ int main(int argc, char *argv[]) {
     rr = rrn;
 
     // r_t * r
-    rtr = vecDotProduct(vec_r, vec_r, vecSize) / bb;
+    rtr = vecDotProduct(vec_r, vec_r, vecSize);
 
     // p_k+1 = r_k+1 + beta * p_k
     vecSumCoef(vec_p, vec_r, vec_p, false, vecSize, beta);
