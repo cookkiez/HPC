@@ -154,6 +154,7 @@ int main(int argc, char *argv[]) {
 
     // Memory cleanup
     mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
     mtx_CSR_free(&mtxCSR);
     mtx_CSR_free(&mtxCSR_t);
     mtx_ELL_free(&mtxELL);
@@ -173,6 +174,7 @@ int main(int argc, char *argv[]) {
 
     // Memory cleanup
     mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
     mtx_CSR_free(&mtxCSR);
     mtx_CSR_free(&mtxCSR_t);
     mtx_ELL_free(&mtxELL);
@@ -196,6 +198,7 @@ int main(int argc, char *argv[]) {
 
     // Memory cleanup
     mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
     mtx_CSR_free(&mtxCSR);
     mtx_CSR_free(&mtxCSR_t);
     mtx_ELL_free(&mtxELL);
@@ -224,6 +227,7 @@ int main(int argc, char *argv[]) {
 
     // Memory cleanup
     mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
     mtx_CSR_free(&mtxCSR);
     mtx_CSR_free(&mtxCSR_t);
     mtx_ELL_free(&mtxELL);
@@ -246,6 +250,7 @@ int main(int argc, char *argv[]) {
 
     // Memory cleanup
     mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
     mtx_CSR_free(&mtxCSR);
     mtx_CSR_free(&mtxCSR_t);
     mtx_ELL_free(&mtxELL);
@@ -268,6 +273,7 @@ int main(int argc, char *argv[]) {
 
     // Memory cleanup
     mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
     mtx_CSR_free(&mtxCSR);
     mtx_CSR_free(&mtxCSR_t);
     mtx_ELL_free(&mtxELL);
@@ -291,6 +297,7 @@ int main(int argc, char *argv[]) {
 
     // Memory cleanup
     mtx_COO_free(&mtxCOO);
+    mtx_COO_free(&mtxCOO_t);
     mtx_CSR_free(&mtxCSR);
     mtx_CSR_free(&mtxCSR_t);
     mtx_ELL_free(&mtxELL);
@@ -376,6 +383,7 @@ int main(int argc, char *argv[]) {
   
   // Clear memory
   mtx_COO_free(&mtxCOO);
+  mtx_COO_free(&mtxCOO_t);
   mtx_CSR_free(&mtxCSR);
   mtx_CSR_free(&mtxCSR_t);
   mtx_ELL_free(&mtxELL);
