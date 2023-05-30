@@ -64,6 +64,7 @@ int mtx_ELL_create_from_mtx_CSR(struct mtx_ELL *mELL, struct mtx_CSR *mCSR);
 int mtx_ELL_free(struct mtx_ELL *mELL);
 
 int mtx_JDS_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR);
+int mtx_JDSrow_create_from_mtx_CSR(struct mtx_JDS *mJDS, struct mtx_CSR *mCSR);
 int mtx_JDS_free(struct mtx_JDS *mJDS);
 
 void vecPrintInt(int *vecIn, int n);

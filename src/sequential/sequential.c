@@ -15,7 +15,8 @@
 #include "../mtx_sparse.h"
 
 void printHelp(const char *progName) {
-  fprintf(stderr, "Usage: %s [-n iterations] [-e margin] FILE\n", progName);
+  fprintf(stderr, "Usage: %s [-n iterations] [-e margin] [-a algorithm] FILE\n", progName);
+  fprintf(stderr, "Algorithms:\n0 - JDS (column major) optimized\n1 - JDS (column major)\n2 - JDS (row major) optimized\n3 - JDS (row major)\n");
 }
 
 void vecSumCoef(double *vecOut, double *vecInA, double *vecInB, bool subtract, int n, double coef) {
@@ -58,7 +59,8 @@ void mtxVecProduct_JDS(double *vecOut, struct mtx_JDS *mtx, double *vecIn, int n
 
 void mtxVecProduct_JDSrow(double *vecOut, struct mtx_JDS *mtx, double *vecIn, int n) {
   // Init value of output vector
-  memset(vecOut, 0, n * sizeof(double)); // Set output vector to zero
+  for (int i = 0; i < n; i++)
+    vecOut[i] = 0; // Set output vector to zero
 
   // Multiply each non zero
   // dynamic schedule because of unequal load per row (rows have different sizes)
@@ -75,9 +77,14 @@ int main(int argc, char *argv[]) {
   uint32_t iterations = 1000;
   double margin = 1e-8;
   bool showIntermediateResult = false;
+  int algorithm = 1;
+  
   int c;
-  while ((c = getopt(argc, argv, "n:e:s")) != -1) {
+  while ((c = getopt(argc, argv, "a:n:e:s")) != -1) {
     switch (c) {
+      case 'a':
+        sscanf(optarg, "%d", &algorithm);
+        break;
       case 'n':
         sscanf(optarg, "%o", &iterations);
         break;
@@ -100,8 +107,19 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
+  if (algorithm < 0 || algorithm > 3) {
+    printHelp(argv[0]);
+    exit(EXIT_FAILURE);
+  }
+
   // Init random
   srand(time(NULL));
+
+  // Create matrix structures
+  struct mtx_COO mtxCOO, mtxCOO_t;
+  struct mtx_CSR mtxCSR, mtxCSR_t;
+  struct mtx_ELL mtxELL, mtxELL_t;
+  struct mtx_JDS mtxJDS, mtxJDS_t, mtxJDSr, mtxJDSr_t;
 
   // Open file with matrix A
   FILE *file;
@@ -109,33 +127,34 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Failed to open: %s \n", argv[optind]);
     exit(EXIT_FAILURE);
   }
+  if (mtx_COO_create_from_file(&mtxCOO, file, false) != 0) {
+    fprintf(stderr, "Failed to extract COO matrix from file\n");
+    exit(EXIT_FAILURE);
+  }
+
   FILE *file2;
   if ((file2 = fopen(argv[optind], "r")) == NULL) {
     fprintf(stderr, "Failed to open: %s \n", argv[optind]);
-    exit(EXIT_FAILURE);
-  }
-  // Create matrix structures
-  struct mtx_COO mtxCOO, mtxCOO_t;
-  struct mtx_CSR mtxCSR, mtxCSR_t;
-  struct mtx_ELL mtxELL, mtxELL_t;
-  struct mtx_JDS mtxJDS, mtxJDS_t;
-
-  if (mtx_COO_create_from_file(&mtxCOO, file, false) != 0) {
-    fprintf(stderr, "Failed to extract COO matrix from file\n");
     exit(EXIT_FAILURE);
   }
   if (mtx_COO_create_from_file(&mtxCOO_t, file2, true) != 0) {
     fprintf(stderr, "Failed to extract COO matrix from file\n");
     exit(EXIT_FAILURE);
   }
-  
+  printf("Files loaded\n");
+
+  printf("Coverting to different formats...\n");
+  fflush(stdout);
   mtx_CSR_create_from_mtx_COO(&mtxCSR, &mtxCOO);
   mtx_CSR_create_from_mtx_COO(&mtxCSR_t, &mtxCOO_t);
   mtx_ELL_create_from_mtx_CSR(&mtxELL, &mtxCSR);
   mtx_ELL_create_from_mtx_CSR(&mtxELL_t, &mtxCSR_t);
   mtx_JDS_create_from_mtx_CSR(&mtxJDS, &mtxCSR);
   mtx_JDS_create_from_mtx_CSR(&mtxJDS_t, &mtxCSR_t);
-
+  mtx_JDSrow_create_from_mtx_CSR(&mtxJDSr, &mtxCSR);
+  mtx_JDSrow_create_from_mtx_CSR(&mtxJDSr_t, &mtxCSR_t);
+  printf("Different formats generated\n");
+  
   /*printf("COO data: ");
   vecPrint(mtxCOO.data, mtxCOO.num_nonzeros);
   printf("COO col: ");
@@ -161,6 +180,8 @@ int main(int argc, char *argv[]) {
     mtx_ELL_free(&mtxELL_t);
     mtx_JDS_free(&mtxJDS);
     mtx_JDS_free(&mtxJDS_t);
+    mtx_JDS_free(&mtxJDSr);
+    mtx_JDS_free(&mtxJDSr_t);
 
     exit(EXIT_FAILURE);
   }
@@ -181,10 +202,13 @@ int main(int argc, char *argv[]) {
     mtx_ELL_free(&mtxELL_t);
     mtx_JDS_free(&mtxJDS);
     mtx_JDS_free(&mtxJDS_t);
+    mtx_JDS_free(&mtxJDSr);
+    mtx_JDS_free(&mtxJDSr_t);
     free(vec_tmp);
 
     exit(EXIT_FAILURE);
   }
+  
   for (int i = 0; i < vecSize; i++)
     vec_x[i] = 1; // Initial s
   //vec_x[0] = 2; vec_x[1] = 1;
@@ -205,12 +229,25 @@ int main(int argc, char *argv[]) {
     mtx_ELL_free(&mtxELL_t);
     mtx_JDS_free(&mtxJDS);
     mtx_JDS_free(&mtxJDS_t);
+    mtx_JDS_free(&mtxJDSr);
+    mtx_JDS_free(&mtxJDSr_t);
     free(vec_tmp);
     free(vec_x);
 
     exit(EXIT_FAILURE);
   }
-  mtxVecProduct_JDS(vec_b, &mtxJDS, vec_x, vecSize);
+  
+  switch (algorithm) {
+    case 0: // JDS (column major) optimized
+    case 1: // JDS (column major)
+      mtxVecProduct_JDS(vec_b, &mtxJDS, vec_x, vecSize);
+      break;
+    case 2: // JDS (row major) optimized
+    case 3: // JDS (row major)
+      mtxVecProduct_JDSrow(vec_b, &mtxJDSr, vec_x, vecSize);
+      break;
+  }
+  
   printf("Vector b: ");
   vecPrint(vec_b, vecSize);
   
@@ -234,13 +271,24 @@ int main(int argc, char *argv[]) {
     mtx_ELL_free(&mtxELL_t);
     mtx_JDS_free(&mtxJDS);
     mtx_JDS_free(&mtxJDS_t);
+    mtx_JDS_free(&mtxJDSr);
+    mtx_JDS_free(&mtxJDSr_t);
     free(vec_tmp);
     free(vec_x);
     free(vec_b);
 
     exit(EXIT_FAILURE);
   }
-  mtxVecProduct_JDS(vec_tmp, &mtxJDS, vec_x, vecSize); // Ax_0
+  switch (algorithm) {
+    case 0: // JDS (column major) optimized
+    case 1: // JDS (column major)
+      mtxVecProduct_JDS(vec_tmp, &mtxJDS, vec_x, vecSize); // Ax_0
+      break;
+    case 2: // JDS (row major) optimized
+    case 3: // JDS (row major)
+      mtxVecProduct_JDSrow(vec_tmp, &mtxJDSr, vec_x, vecSize); // Ax_0
+      break;
+  }
   vecSumCoef(vec_r, vec_b, vec_tmp, true, vecSize, 1); // r = b - Ax_0
   
   // r_dash_0 = r_0
@@ -257,6 +305,8 @@ int main(int argc, char *argv[]) {
     mtx_ELL_free(&mtxELL_t);
     mtx_JDS_free(&mtxJDS);
     mtx_JDS_free(&mtxJDS_t);
+    mtx_JDS_free(&mtxJDSr);
+    mtx_JDS_free(&mtxJDSr_t);
     free(vec_tmp);
     free(vec_x);
     free(vec_b);
@@ -280,6 +330,8 @@ int main(int argc, char *argv[]) {
     mtx_ELL_free(&mtxELL_t);
     mtx_JDS_free(&mtxJDS);
     mtx_JDS_free(&mtxJDS_t);
+    mtx_JDS_free(&mtxJDSr);
+    mtx_JDS_free(&mtxJDSr_t);
     free(vec_tmp);
     free(vec_x);
     free(vec_b);
@@ -304,6 +356,8 @@ int main(int argc, char *argv[]) {
     mtx_ELL_free(&mtxELL_t);
     mtx_JDS_free(&mtxJDS);
     mtx_JDS_free(&mtxJDS_t);
+    mtx_JDS_free(&mtxJDSr);
+    mtx_JDS_free(&mtxJDSr_t);
     free(vec_tmp);
     free(vec_x);
     free(vec_b);
@@ -335,7 +389,16 @@ int main(int argc, char *argv[]) {
     rr = vecDotProduct(vec_r_dash, vec_r, vecSize);
 
     // Ap_k
-    mtxVecProduct_JDS(vec_tmp, &mtxJDS, vec_p, vecSize);
+    switch (algorithm) {
+      case 0: // JDS (column major) optimized
+      case 1: // JDS (column major)
+        mtxVecProduct_JDS(vec_tmp, &mtxJDS, vec_p, vecSize);
+        break;
+      case 2: // JDS (row major) optimized
+      case 3: // JDS (row major)
+        mtxVecProduct_JDSrow(vec_tmp, &mtxJDSr, vec_p, vecSize);
+        break;
+    }
     
     // alpha = (r_dash_t * r_t) / (p_dash_t * A * p)
     alpha = rr / vecDotProduct(vec_p_dash, vec_tmp, vecSize);
@@ -351,8 +414,16 @@ int main(int argc, char *argv[]) {
     vecSumCoef(vec_r, vec_r, vec_tmp, true, vecSize, alpha);
 
     // A_t p_Dash
-    //printf("\n----TRANSPOSE Multiplication----\n");
-    mtxVecProduct_JDS(vec_tmp, &mtxJDS_t, vec_p_dash, vecSize);
+    switch (algorithm) {
+      case 0: // JDS (column major) optimized
+      case 1: // JDS (column major)
+        mtxVecProduct_JDS(vec_tmp, &mtxJDS_t, vec_p_dash, mtxCOO_t.num_cols);
+        break;
+      case 2: // JDS (row major) optimized
+      case 3: // JDS (row major)
+        mtxVecProduct_JDSrow(vec_tmp, &mtxJDSr_t, vec_p_dash, mtxCOO_t.num_cols);
+        break;
+    }
     
     // r_dash_k+1 = r_dash_k - alpha * A_t * p_dash_k
     vecSumCoef(vec_r_dash, vec_r_dash, vec_tmp, true, vecSize, alpha);
@@ -390,6 +461,8 @@ int main(int argc, char *argv[]) {
   mtx_ELL_free(&mtxELL_t);
   mtx_JDS_free(&mtxJDS);
   mtx_JDS_free(&mtxJDS_t);
+  mtx_JDS_free(&mtxJDSr);
+  mtx_JDS_free(&mtxJDSr_t);
   free(vec_tmp);
   free(vec_b);
   free(vec_x);

@@ -10,5 +10,5 @@ export OMP_PLACES=cores
 export OMP_PROC_BIND=TRUE
 export OMP_NUM_THREADS=1
 
-srun ../../build/openmp $@
+srun ./build/openmp $@
 wait

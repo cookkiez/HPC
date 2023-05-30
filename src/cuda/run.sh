@@ -9,4 +9,4 @@ srun \
   --time=00:10:00 \
   --output=vzr-task1-cuda.txt \
   --job-name=vzr-task1-cuda \
-  ../../build/cuda $@
+  ./build/cuda $@
