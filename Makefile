@@ -5,10 +5,10 @@ build-cuda: src/cuda/cuda.cu
 	nvcc src/cuda/cuda.cu -Xcompiler -O2 src/mtx_sparse.c -o build/cuda --expt-relaxed-constexpr
 
 build-seq: src/sequential/sequential.c
-	gcc src/sequential/sequential.c src/mtx_sparse.c -lm -O2 -Wall -Wno-unused-variable -Wno-unused-result -o build/sequential
+	gcc src/sequential/sequential.c src/mtx_sparse.c -lm -O2 -Wall -Wno-unused-variable -Wno-unused-result -Wno-unused-but-set-variable -o build/sequential
 
 build-openmp: src/openmp/openmp.c
-	gcc src/openmp/openmp.c src/mtx_sparse.c --openmp -lm -O2 -o build/openmp
+	gcc src/openmp/openmp.c src/mtx_sparse.c --openmp -lm -O2 -Wno-unused-result -o build/openmp
 
 build-openmpi: src/openmp/openmp.c
 	module load OpenMPI/4.1.0-GCC-10.2.0 
