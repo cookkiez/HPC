@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
   int algorithm = 1;
 
   int c;
-  while ((c = getopt(argc, argv, "n:e:s")) != -1) {
+  while ((c = getopt(argc, argv, "a:n:e:s")) != -1) {
     switch (c) {
       case 'a':
         sscanf(optarg, "%d", &algorithm);
@@ -299,8 +299,8 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < vecSize; i++)
     vec_x[i] = 1; // Initial s
   //vec_x[0] = 2; vec_x[1] = 1;
-  printf("Correct solution: ");
-  vecPrint(vec_x, vecSize);
+  //printf("Correct solution: ");
+  //vecPrint(vec_x, vecSize);
 
   // b = Ax_0 (generate constant)
   double *vec_b = (double*)malloc(vecSize * sizeof(double));
@@ -345,8 +345,8 @@ int main(int argc, char *argv[]) {
   // x_0 = random
   for (int i = 0; i < vecSize; i++)
     vec_x[i] = rand() % 10 + 1; // Initial x_0 value (generate randomly [0, 9])
-  printf("x_0: ");
-  vecPrint(vec_x, vecSize);
+  //printf("x_0: ");
+  //vecPrint(vec_x, vecSize);
 
   // r_0 = b - Ax_0
   double *vec_r = (double*)malloc(vecSize * sizeof(double));
