@@ -120,7 +120,7 @@ void get_matrix_from_file(struct mtx_JDS *proc_mtxJDS, bool transposed, char *ar
     mtx_CSR_free(&mtxCSR);
 }
 
-struct mtx_JDS get_matrix(struct mtx_JDS *proc_mtxJDS, bool transposed, int rank, int num_p, char *argv[], int* all_rows) {
+struct mtx_JDS get_matrix(struct mtx_JDS *proc_mtxJDS, bool transposed, int rank, int num_p, char *argv[], int* all_rows, double* network_time) {
   int proc_jag_start, proc_jag_end;
   int proc_num_rows, proc_num_cols, proc_num_els, proc_max_el_in_row, proc_num_nonzeros;
   int *jags_start = malloc(sizeof(int)* num_p);
@@ -153,6 +153,7 @@ struct mtx_JDS get_matrix(struct mtx_JDS *proc_mtxJDS, bool transposed, int rank
   }
   // printf("TEST: %d %d\n", rank, transposed);
   // fflush(stdout);
+  double time = MPI_Wtime();
   MPI_Barrier(MPI_COMM_WORLD);
   MPI_Bcast(&proc_num_rows, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
   MPI_Bcast(&proc_num_cols, 1, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
@@ -172,6 +173,7 @@ struct mtx_JDS get_matrix(struct mtx_JDS *proc_mtxJDS, bool transposed, int rank
   MPI_Bcast(proc_mtxJDS->col, proc_num_els, MPI_INT, PROCESS_ROOT, MPI_COMM_WORLD);
   MPI_Bcast(proc_mtxJDS->data, proc_num_els, MPI_DOUBLE, PROCESS_ROOT, MPI_COMM_WORLD);
   MPI_Barrier(MPI_COMM_WORLD);
+  *network_time += (double) (MPI_Wtime() - time);
   struct mtx_JDS temp_mtxJDS;
   temp_mtxJDS.num_elements = proc_jag_end - proc_jag_start;
   temp_mtxJDS.data = (double *)calloc(proc_mtxJDS->num_elements, sizeof(double));
@@ -262,9 +264,10 @@ int main(int argc, char *argv[]) {
 	MPI_Init(&argc, &argv); // initialize MPI 
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank); // get process rank 
 	MPI_Comm_size(MPI_COMM_WORLD, &num_p); // get number of processes
-	
-	//printf("Process %d/%d\n", rank, num_p);
-  //fflush(stdout);
+	if(rank == 0) {
+	  printf("Process %d/%d\n", rank, num_p);
+    fflush(stdout);
+  }
   // Main process
   int vecSize = 0;
   struct mtx_JDS proc_mtxJDS, proc_mtxJDS_t, mtxJDS;
@@ -303,14 +306,16 @@ int main(int argc, char *argv[]) {
   //printf("Getting matrices, process : %d\n", rank);
   //fflush(stdout);
   int all_rows = 0;
-  proc_mtxJDS = get_matrix(&proc_mtxJDS, false, rank, num_p, argv, &all_rows);
-  proc_mtxJDS_t = get_matrix(&proc_mtxJDS_t, true, rank, num_p, argv, &all_rows);
+  double network_time = 0;
+  proc_mtxJDS = get_matrix(&proc_mtxJDS, false, rank, num_p, argv, &all_rows, &network_time);
+  proc_mtxJDS_t = get_matrix(&proc_mtxJDS_t, true, rank, num_p, argv, &all_rows, &network_time);
   //printf("Got matrices, process : %d\n", rank);
   //fflush(stdout);
+  double end_init_time = 0;
   if (rank == 0) {
-    double end_init_time = MPI_Wtime();
-    printf("Init time : %.5lf s\n", (double)(end_init_time - init_time));
-    fflush(stdout);
+    end_init_time = (double)(MPI_Wtime() - init_time);
+    //printf("Init time : %.5lf s\n", end_init_time);
+    //fflush(stdout);
   }
   // printf("AFTER %d\n", all_rows);
   // printf("PROCESS : %d\n", rank);
@@ -364,10 +369,10 @@ int main(int argc, char *argv[]) {
     //vecPrint(vec_x, vecSize);
   //}
   // Send settings to all processes
-
+  double time = MPI_Wtime();
   MPI_Bcast(&margin, 1, MPI_DOUBLE, PROCESS_ROOT, MPI_COMM_WORLD);
   MPI_Barrier(MPI_COMM_WORLD);
-
+  network_time += (double) (MPI_Wtime() - time);
   // TODO: Scatterv (matrix rows)
   // printf("PROCESS: %d %d \n ", rank, proc_mtxJDS.num_rows);
   // vecPrintInt(proc_mtxJDS.jagged_ptr, proc_mtxJDS.max_el_in_row);
@@ -375,7 +380,7 @@ int main(int argc, char *argv[]) {
   // vecPrint(proc_mtxJDS.data, proc_mtxJDS.num_elements);
   // vecPrint(vec_x, vecSize);
   // vecPrint(vec_b, vecSize);
-  printf("Started computing process: %d\n", rank);
+  //printf("Started computing process: %d\n", rank);
   // fflush(stdout);
   // Temporary
   double *vec_tmp = (double*)malloc(vecSize * sizeof(double));
@@ -458,15 +463,17 @@ int main(int argc, char *argv[]) {
     //fflush(stdout);
   }
   MPI_Barrier(MPI_COMM_WORLD);
+  double compute_time = 0;
   if (rank == 0) {
-    double time_end = MPI_Wtime();
-    printf("Compute time: %.5lf s\n", (double)(time_end - time_start));
+    compute_time = (double)(MPI_Wtime() - time_start);
+    //printf("Compute time: %.5lf s\n", (double)(time_end - time_start));
   }
   // printf("PROCESS a: %d %d %d\n", rank, vecSize, proc_mtxJDS.num_rows);
   // vecPrintInt(proc_mtxJDS.jagged_ptr, proc_mtxJDS.max_el_in_row + 1);
   // //fflush(stdout); 
   // vecPrint(vec_x, vecSize);
   if (rank == 0) {
+    double time = MPI_Wtime();
     for (int p = 1; p < num_p; p++) {
       double *vec_temp_sum = (double*)malloc(vecSize * sizeof(double));
       MPI_Status status;
@@ -474,6 +481,7 @@ int main(int argc, char *argv[]) {
       vecSumCoef(vec_x, vec_x, vec_temp_sum, false, vecSize, 1); 
       //vecPrint(vec_x, vecSize);
     }
+    network_time += (double) (MPI_Wtime() - time);
   } else {
     MPI_Send(vec_x, vecSize, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
   }
@@ -486,9 +494,10 @@ int main(int argc, char *argv[]) {
     double error = 0;
     for (int i = 0; i < vecSize; i++) { error += fabs(1 - fabs(vec_x[i])); }
     // Print result0
-    printf("Iterations: %o/%o\nResult: ", k, iterations);
+    printf("Iterations: %o/%o: ", k, iterations);
     // vecPrint(vec_x, vecSize);
-    printf("Error: %.7f, Elapsed (compute + building result): %.5lf s\n", error, (double)(time_end - time_start));
+    printf("Error: %.7f, Init time: %.5lf s, Network time: %.5lf s, Compute time: %.5lf s, Elapsed (Wall): %.5lf s\n", error, end_init_time, network_time, compute_time, (double)(time_end - init_time));
+    printf("%.7f,%.7lf,%.7lf,%.7lf,%.7lf\n", error, end_init_time, network_time, compute_time, (double)(time_end - init_time));
     fflush(stdout);
   }
   //MPI_Barrier(MPI_COMM_WORLD);
